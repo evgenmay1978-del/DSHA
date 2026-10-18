@@ -33,6 +33,8 @@ Material3、单 Gradle 模块 `:app`。
 
 ## 技术约束（围绕这些设计）
 
+- **读屏模型（个人分支）**：主屏 `/app/ui/dump` 与虚拟屏 `virtualDump` 共用 `util/UiSnapshot` + `util/UiNode`。节点仍须满足 `AccessibilityDumpBounds.reportable` 与 `AccessibilityTreeBudget` 的既有上限；`#ref` 为遍历序号，`screen=` 指纹只看结构（类名、id、文字、动作标志、旋转），不看像素边界。`changed_only` 的基线是上一次主屏 dump 的内存快照，不落盘、不含密码字段文字。新增读屏字段必须加在纯逻辑模型里并配宿主 JUnit，不在服务里直接拼字符串。
+
 - **build171 整合约束**：自动端口先 `--port 0`，仅复用本机保存且仍可用的实际端口；旧自定义端口继续手动，旧默认3080转自动。完整官方启动行才可鉴权，只有单一明确 bind 冲突且本轮 guest 核验退出后可重试一次；LAN 绑定同代次实际端口。旧端口网页数据通过原生恢复入口保留源与候选，先关闭预览并核验再写空白目标，不转移凭据/lease。内部破坏性工具 guard 不构成系统沙箱，原生终端和插件安装保持开放；已知绕过与设备限制须如实声明。ColdSetupTiming 归 core 编排，冷安装仍做完整内容摘要，不用 stat 缓存作为提交证明。
 
 - **网页文件与虚拟屏（build164）**：WebView 的 `window.DSHA.shareFile/saveFile` 接收网页已有的 File/Blob，通过精确同源、顶层帧、当前运行实例的 WebMessageListener 转为受限流式传输，不接收本机路径。分享缓存的实际文件名与显示名一致，FileProvider仅临时授权读取；返回chooser-opened只代表选择器打开。下载绑定原download文件名并反馈保存/取消/失败。原生分享在Android13通过，Android SAF最终落盘及原Android16报告设备未复测。`VirtualScreenCore --launch` 在握手/清理完成后显式System.exit(0)，避免ROM非守护线程阻止父进程结束；不能因此放宽通道鉴权或成功退出判定。
