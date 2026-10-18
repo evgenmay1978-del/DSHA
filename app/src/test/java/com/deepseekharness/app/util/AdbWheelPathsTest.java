@@ -187,15 +187,28 @@ public class AdbWheelPathsTest {
     File data = data();
     StrictFs fs = new StrictFs();
     File link = new File(data, "files/linux/ubuntu/root/.dsh");
+    String foreignHost = new File(data.getParentFile(), "other-app").getPath();
     for (String target :
         new String[] {
-          "/sdcard/Documents/dshdata",
-          "../sdcard/dshdata",
-          "/data/user/0/other.app/files/data",
-          new File(data.getParentFile(), "other-app").getPath()
+          "/sdcard/Documents/dshdata", "../sdcard/dshdata", "/data/user/0/other.app/files/data"
         }) {
       fs.links.put(link, target);
       assertThrows(target, IOException.class, () -> bind(fs, data));
+    }
+    fs.links.put(link, foreignHost);
+    if (foreignHost.startsWith("/")) {
+      // POSIX: an absolute target of a link inside the guest rootfs is a guest path (proot sees the
+      // rootfs as "/"), so a host-looking sibling path resolves inside the rootfs, not to the host
+      // sibling. Pin exactly that instead of an escape that cannot happen here; the real Android
+      // escape (/data/...) is rejected above.
+      AdbWheelPaths paths = bind(fs, data);
+      assertEquals(
+          new File(paths.rootfs, foreignHost.substring(1)).getCanonicalPath(),
+          paths.home.getCanonicalPath());
+      assertTrue(DocumentPaths.within(paths.rootfs, paths.home));
+    } else {
+      // Windows: a drive-letter host path has no guest meaning and must be rejected.
+      assertThrows(foreignHost, IOException.class, () -> bind(fs, data));
     }
     assertFalse(new File(link, "wheels").exists());
     assertFalse(new File(data, "files/linux/ubuntu/sdcard").exists());
