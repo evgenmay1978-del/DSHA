@@ -1,5 +1,13 @@
 # 更新记录
 
+## 未发布 · 个人分支 evgenmay1978-del/DSHA
+
+- `/app/ui/dump` 观察结果升级：首行给出 app、屏幕尺寸、DPI、旋转与结构指纹 `screen=`；每个节点带稳定 `#ref`、短类名、resource-id、文字和动作标志（click/long/edit/scroll/on·off/focused/disabled/selected/password）及中心点与边界。
+- 新增 `?mode=outline`（只列可操作节点，省 token）与 `?changed_only=1`（只回与上次 dump 的差异：+新增 / -消失 / ~状态变化；结构未变只回一行 `unchanged`）。旧调用不带参数时仍是完整清单。
+- 虚拟屏 `virtualDump` 复用同一快照模型与遍历预算；屏幕旋转改经 DisplayManager 读取（服务 Context 在 Android 11+ 上调用 `getDisplay()` 会抛异常）。
+- 纯逻辑模型 `UiNode` / `UiSnapshot` 不依赖 Android，宿主 JUnit 覆盖 ref 稳定性、指纹对像素抖动不敏感与差异分类。
+- 修复格式清单漏登：`BoundedGuestBootRecovery` 及其测试由 `[skip ci]` 同步提交引入但未进入 `java-format-files.json`，导致 `format-java-tree --check` 在 main 上失败；两文件本身已符合格式，未改代码。
+
 ## 0.2.0-rc2.1 · build172（2026-10-14，本地软件交付）
 
 - 默认与首次升级优先 bxroot，保留 proot 兼容选择；新的退出证明覆盖 owned 后代树，明确引擎启动失败后才有限回退，未知结果不重放。

@@ -488,9 +488,15 @@ public class DshaAccessibilityService extends AccessibilityService {
     try {
       root = virtualRoot(displayId);
       if (root == null) return "VIRTUAL_WINDOW_UNAVAILABLE";
-      StringBuilder out = new StringBuilder();
-      dumpNode(root, out, 0, new int[] {0});
-      return out.toString();
+      com.deepseekharness.app.util.UiSnapshot.Builder b =
+          com.deepseekharness.app.util.UiSnapshot.builder();
+      CharSequence pkg = root.getPackageName();
+      b.window(pkg == null ? "" : pkg.toString(), "");
+      b.display(displayId, 0, 0, 0, 0);
+      var budget = new com.deepseekharness.app.util.AccessibilityTreeBudget();
+      collectNodes(root, b, 0, budget);
+      b.truncated(budget.exhausted());
+      return b.build().render(com.deepseekharness.app.util.UiSnapshot.Mode.FULL);
     } catch (Throwable e) {
       return "VIRTUAL_TREE_UNAVAILABLE";
     } finally {
@@ -522,28 +528,50 @@ public class DshaAccessibilityService extends AccessibilityService {
     }
   }
 
-  /** 读当前屏幕：输出带序号、文本、可点击性与坐标的清单，供 agent 决定下一步点哪个。 */
+  /** 最近一次主屏 dump 的结构快照，仅用于 changed_only 的增量比较（不保留像素/截图）。 */
+  private static volatile com.deepseekharness.app.util.UiSnapshot lastSnapshot;
+
+  /** 历史签名：等价于 {@code uiDump("full", false)}，保持旧调用方不变。 */
   public static String uiDump() {
+    return uiDump("full", false);
+  }
+
+  /**
+   * 读当前屏幕，产出带 ref 序号、类名、resource-id、文字、动作标志与坐标的清单。
+   *
+   * @param mode {@code full}（全部可读/可操作节点）或 {@code outline}（只保留可操作节点，省 token）
+   * @param changedOnly true 时只回报与上一次 dump 的差异（+新增 / -消失 / ~状态变化 / =未变计数）；
+   *     屏幕结构未变时只回一行，让“点了没反应”这种观察变得便宜。
+   */
+  public static String uiDump(String mode, boolean changedOnly) {
     DshaAccessibilityService s = instance;
     if (s == null) return com.deepseekharness.app.util.UiText.text(NOT_READY);
     try {
       AccessibilityNodeInfo root = activeWindow(s);
       if (root == null)
         return com.deepseekharness.app.util.UiText.text("[ERR] 取不到当前窗口（可能停在锁屏或系统弹窗上）");
-      StringBuilder sb = new StringBuilder();
+      com.deepseekharness.app.util.UiSnapshot.Builder b =
+          com.deepseekharness.app.util.UiSnapshot.builder();
       CharSequence pkg = root.getPackageName();
-      sb.append("窗口应用: ").append(pkg == null ? "未知" : pkg).append('\n');
-      int[] n = {0};
+      b.window(pkg == null ? "" : pkg.toString(), "");
+      applyDisplayMetrics(s, b);
+      var budget = new com.deepseekharness.app.util.AccessibilityTreeBudget();
       try {
-        dumpNode(root, sb, 0, n);
+        collectNodes(root, b, 0, budget);
       } finally {
         try {
           root.recycle();
         } catch (Throwable ignored) {
         }
       }
-      if (n[0] == 0) sb.append("（没有可读节点）\n");
-      return sb.toString();
+      b.truncated(budget.exhausted());
+      com.deepseekharness.app.util.UiSnapshot snap = b.build();
+      String out =
+          changedOnly
+              ? snap.diff(lastSnapshot)
+              : snap.render(com.deepseekharness.app.util.UiSnapshot.Mode.parse(mode));
+      lastSnapshot = snap;
+      return out;
     } catch (TargetChangedException rejected) {
       return ScreenActionResult.NOT_EXECUTED_REPLY;
     } catch (Throwable t) {
@@ -552,52 +580,101 @@ public class DshaAccessibilityService extends AccessibilityService {
     }
   }
 
-  private static void dumpNode(
-      AccessibilityNodeInfo node, StringBuilder sb, int depth, int[] count) {
-    if (node == null || depth > 24 || count[0] >= 200 || sb.length() > 12000) return;
-    CharSequence t = node.isPassword() ? null : node.getText();
-    CharSequence d = node.isPassword() ? null : node.getContentDescription();
-    boolean clickable = node.isClickable();
-    boolean editable = node.isEditable();
+  /**
+   * 屏幕尺寸/DPI/旋转。服务不是界面 Context：Android 11+ 上 {@code getDisplay()} 会直接抛
+   * UnsupportedOperationException，所以旋转经 DisplayManager 取默认显示器；尺寸在 API 30+ 用
+   * 最大窗口度量（含系统栏，与手势坐标系一致），否则退回资源度量。取不到的项留 0，不让一个取值
+   * 异常毁掉整次读屏。
+   */
+  private static void applyDisplayMetrics(
+      DshaAccessibilityService s, com.deepseekharness.app.util.UiSnapshot.Builder b) {
+    int width = 0, height = 0, dpi = 0, rotation = 0;
+    try {
+      android.util.DisplayMetrics dm = s.getResources().getDisplayMetrics();
+      width = dm.widthPixels;
+      height = dm.heightPixels;
+      dpi = dm.densityDpi;
+    } catch (Throwable ignored) {
+    }
+    try {
+      if (android.os.Build.VERSION.SDK_INT >= 30) {
+        var wm = (android.view.WindowManager) s.getSystemService(Context.WINDOW_SERVICE);
+        if (wm != null) {
+          android.graphics.Rect bounds = wm.getMaximumWindowMetrics().getBounds();
+          if (bounds.width() > 0 && bounds.height() > 0) {
+            width = bounds.width();
+            height = bounds.height();
+          }
+        }
+      }
+    } catch (Throwable ignored) {
+    }
+    try {
+      var displays =
+          (android.hardware.display.DisplayManager) s.getSystemService(Context.DISPLAY_SERVICE);
+      android.view.Display display =
+          displays == null ? null : displays.getDisplay(android.view.Display.DEFAULT_DISPLAY);
+      if (display != null) rotation = display.getRotation();
+    } catch (Throwable ignored) {
+    }
+    b.display(0, width, height, dpi, rotation);
+  }
+
+  /** 把一棵无障碍树里「值得报」的节点按遍历顺序填进快照，遍历预算与输出上限沿用既有不变量。 */
+  private static void collectNodes(
+      AccessibilityNodeInfo node,
+      com.deepseekharness.app.util.UiSnapshot.Builder b,
+      int depth,
+      com.deepseekharness.app.util.AccessibilityTreeBudget budget) {
+    if (node == null || !budget.enter(depth, b.size())) return;
+    boolean password = node.isPassword();
+    CharSequence t = password ? null : node.getText();
+    CharSequence d = password ? null : node.getContentDescription();
     String label =
-        node.isPassword()
-            ? "[PASSWORD]"
-            : !TextUtils.isEmpty(t) ? t.toString() : (!TextUtils.isEmpty(d) ? d.toString() : "");
+        !TextUtils.isEmpty(t)
+            ? t.toString().replace('\n', ' ')
+            : (!TextUtils.isEmpty(d) ? d.toString().replace('\n', ' ') : "");
+    boolean clickable = node.isClickable();
+    boolean longClickable = node.isLongClickable();
+    boolean editable = node.isEditable();
+    boolean scrollable = node.isScrollable();
+    boolean checkable = node.isCheckable();
+    boolean focused = node.isFocused();
+    boolean actionable =
+        clickable || longClickable || editable || scrollable || checkable || focused;
     android.graphics.Rect r = new android.graphics.Rect();
     node.getBoundsInScreen(r);
-    // 只输出「有文字」或「能点/能输入」的节点，且矩形必须能用来定位：全量节点树对 agent 是噪音，
-    // 反序矩形则连定位都做不到（issue #143 就是这么漏出去的）。
+    // 既有不变量：只报「有文字」或「可操作」且矩形能用来定位的节点（issue #143）。
     if (com.deepseekharness.app.util.AccessibilityDumpBounds.reportable(
-        !label.isEmpty(), clickable || editable, r.left, r.top, r.right, r.bottom)) {
-      count[0]++;
-      sb.append('[').append(count[0]).append("] ");
-      if (!label.isEmpty()) sb.append('"').append(label.replace('\n', ' ')).append('"');
-      if (clickable) sb.append(" 可点击");
-      if (editable) sb.append(" 可输入");
-      if (node.isChecked()) sb.append(" 已选中");
-      if (!node.isEnabled()) sb.append(" 不可用");
-      sb.append(" 中心=(")
-          .append(r.centerX())
-          .append(',')
-          .append(r.centerY())
-          .append(')')
-          .append(" 区域=")
-          .append(r.left)
-          .append(',')
-          .append(r.top)
-          .append(',')
-          .append(r.right)
-          .append(',')
-          .append(r.bottom)
-          .append('\n');
+        !label.isEmpty() || password, actionable, r.left, r.top, r.right, r.bottom)) {
+      int flags = 0;
+      if (clickable) flags |= com.deepseekharness.app.util.UiNode.CLICK;
+      if (longClickable) flags |= com.deepseekharness.app.util.UiNode.LONG_CLICK;
+      if (editable) flags |= com.deepseekharness.app.util.UiNode.EDIT;
+      if (scrollable) flags |= com.deepseekharness.app.util.UiNode.SCROLL;
+      if (checkable) flags |= com.deepseekharness.app.util.UiNode.CHECKABLE;
+      if (node.isChecked()) flags |= com.deepseekharness.app.util.UiNode.CHECKED;
+      if (!node.isEnabled()) flags |= com.deepseekharness.app.util.UiNode.DISABLED;
+      if (focused) flags |= com.deepseekharness.app.util.UiNode.FOCUSED;
+      if (node.isSelected()) flags |= com.deepseekharness.app.util.UiNode.SELECTED;
+      if (password) flags |= com.deepseekharness.app.util.UiNode.PASSWORD;
+      b.add(
+          shortClassName(node.getClassName()),
+          shortViewId(node),
+          label,
+          flags,
+          r.left,
+          r.top,
+          r.right,
+          r.bottom);
     }
-    if (node.isPassword()) return;
+    if (password) return;
     int cn = node.getChildCount();
     for (int i = 0; i < cn; i++) {
       AccessibilityNodeInfo ch = node.getChild(i);
       if (ch == null) continue;
       try {
-        dumpNode(ch, sb, depth + 1, count);
+        collectNodes(ch, b, depth + 1, budget);
       } finally {
         try {
           ch.recycle();
@@ -605,6 +682,27 @@ public class DshaAccessibilityService extends AccessibilityService {
         }
       }
     }
+  }
+
+  /** {@code android.widget.Button} → {@code Button}；空值留空，交给渲染层兜底成 View。 */
+  private static String shortClassName(CharSequence cls) {
+    if (cls == null) return "";
+    String s = cls.toString();
+    int dot = s.lastIndexOf('.');
+    return dot >= 0 && dot + 1 < s.length() ? s.substring(dot + 1) : s;
+  }
+
+  /** {@code com.app:id/ok} → {@code id/ok}；没有资源名留空。 */
+  private static String shortViewId(AccessibilityNodeInfo node) {
+    String id;
+    try {
+      id = node.getViewIdResourceName();
+    } catch (Throwable ignored) {
+      return "";
+    }
+    if (id == null || id.isEmpty()) return "";
+    int colon = id.indexOf(':');
+    return colon >= 0 && colon < id.length() - 1 ? id.substring(colon + 1) : id;
   }
 
   /** 按坐标点按。坐标从 uiDump 的「中心=」里取。 */
