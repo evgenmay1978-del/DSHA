@@ -61,6 +61,12 @@ public final class UiSnapshot {
     return null;
   }
 
+  /** First node with the same identity (class + id + label); refs are positional, identity is not. */
+  public UiNode byIdentity(String identity) {
+    for (UiNode n : nodes) if (n.identity().equals(identity)) return n;
+    return null;
+  }
+
   /**
    * A stable fingerprint of the screen's structure: window identity plus each node's class, id,
    * label and action flags (not its exact pixel bounds, which jitter during animation). Equal ids
@@ -78,6 +84,25 @@ public final class UiSnapshot {
       h = h * 31 + (n.flags & ~UiNode.FOCUSED); // focus alone is not a structural change
     }
     return Long.toHexString(h);
+  }
+
+  public int width() {
+    return width;
+  }
+
+  public int height() {
+    return height;
+  }
+
+  /** True when the tree walk hit its budget, so the agent knows the view is partial. */
+  public boolean truncated() {
+    return truncated;
+  }
+
+  /** True when two reads describe the same screen and the same per-node states. */
+  public boolean sameScreen(UiSnapshot other) {
+    if (other == this) return true;
+    return other != null && screenId().equals(other.screenId()) && sameStates(other);
   }
 
   private static long mix(long h, String s) {

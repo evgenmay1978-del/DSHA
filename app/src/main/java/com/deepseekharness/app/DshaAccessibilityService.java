@@ -547,25 +547,9 @@ public class DshaAccessibilityService extends AccessibilityService {
     DshaAccessibilityService s = instance;
     if (s == null) return com.deepseekharness.app.util.UiText.text(NOT_READY);
     try {
-      AccessibilityNodeInfo root = activeWindow(s);
-      if (root == null)
+      com.deepseekharness.app.util.UiSnapshot snap = snapshotNow(s);
+      if (snap == null)
         return com.deepseekharness.app.util.UiText.text("[ERR] 取不到当前窗口（可能停在锁屏或系统弹窗上）");
-      com.deepseekharness.app.util.UiSnapshot.Builder b =
-          com.deepseekharness.app.util.UiSnapshot.builder();
-      CharSequence pkg = root.getPackageName();
-      b.window(pkg == null ? "" : pkg.toString(), "");
-      applyDisplayMetrics(s, b);
-      var budget = new com.deepseekharness.app.util.AccessibilityTreeBudget();
-      try {
-        collectNodes(root, b, 0, budget);
-      } finally {
-        try {
-          root.recycle();
-        } catch (Throwable ignored) {
-        }
-      }
-      b.truncated(budget.exhausted());
-      com.deepseekharness.app.util.UiSnapshot snap = b.build();
       String out =
           changedOnly
               ? snap.diff(lastSnapshot)
@@ -578,6 +562,241 @@ public class DshaAccessibilityService extends AccessibilityService {
       return com.deepseekharness.app.util.UiText.format(
           "[ERR] 读屏失败：%s", SensitiveData.redact(String.valueOf(t)));
     }
+  }
+
+  /**
+   * 读一次当前窗口的原始快照。uiDump 渲染它，/app/act 用动作前后两份比较是否真的变了；
+   * 取不到窗口时返回 null，异常交给调用方决定怎么答。
+   */
+  private static com.deepseekharness.app.util.UiSnapshot snapshotNow(DshaAccessibilityService s) {
+    AccessibilityNodeInfo root = activeWindow(s);
+    if (root == null) return null;
+    com.deepseekharness.app.util.UiSnapshot.Builder b =
+        com.deepseekharness.app.util.UiSnapshot.builder();
+    CharSequence pkg = root.getPackageName();
+    b.window(pkg == null ? "" : pkg.toString(), "");
+    applyDisplayMetrics(s, b);
+    var budget = new com.deepseekharness.app.util.AccessibilityTreeBudget();
+    try {
+      collectNodes(root, b, 0, budget);
+    } finally {
+      try {
+        root.recycle();
+      } catch (Throwable ignored) {
+      }
+    }
+    b.truncated(budget.exhausted());
+    return b.build();
+  }
+
+  /** 动作之后轮询快照的间隔：短到不会漏掉动画末尾，又不会把一次遍历变成空转。 */
+  private static final int SETTLE_POLL_MS = 120;
+
+  /**
+   * /app/act 的执行体：快照 → 一个动作 → 等界面稳定 → 用前后快照答复。
+   *
+   * <p>动作复用已有原语（uiTap/uiTapText/uiInput/uiKey/uiSwipe）；授权在 HttpShellService 里
+   * 按同一个屏幕目标做，这里只负责执行、等待和差异判定。
+   */
+  public static String uiAct(com.deepseekharness.app.util.UiAct req) {
+    DshaAccessibilityService s = instance;
+    if (s == null) return com.deepseekharness.app.util.UiText.text(NOT_READY);
+    long started = android.os.SystemClock.uptimeMillis();
+    com.deepseekharness.app.util.UiSnapshot before;
+    try {
+      before = snapshotNow(s);
+    } catch (TargetChangedException rejected) {
+      return ScreenActionResult.NOT_EXECUTED_REPLY;
+    } catch (Throwable t) {
+      return com.deepseekharness.app.util.UiText.format(
+          "[ERR] ACT_SNAPSHOT: %s", SensitiveData.redact(String.valueOf(t)));
+    }
+    if (before == null)
+      return com.deepseekharness.app.util.UiText.text("[ERR] 取不到当前窗口（可能停在锁屏或系统弹窗上）");
+    if (req.action != com.deepseekharness.app.util.UiAct.Action.LOOK) {
+      String failure = performAct(req, before);
+      if (failure != null) return failure;
+    }
+    com.deepseekharness.app.util.UiAct.Observation observed =
+        req.action == com.deepseekharness.app.util.UiAct.Action.LOOK
+            ? new com.deepseekharness.app.util.UiAct.Observation(before, true)
+            : settle(s, before, req.settleMs);
+    if (observed.targetChanged) {
+      // 动作已经落地，但 экран ушёл в другое окно: снимок «до» больше не описывает происходящее,
+      // поэтому не выдаём changed=false и не трогаем lastSnapshot — отправляем за новым dump.
+      return com.deepseekharness.app.util.UiAct.statusTransition(
+              req.action, req.ref, android.os.SystemClock.uptimeMillis() - started)
+          + '\n'
+          + "target changed during settle; re-read the new window with /app/ui/dump";
+    }
+    com.deepseekharness.app.util.UiSnapshot after = observed.screen;
+    lastSnapshot = after;
+    String head =
+        com.deepseekharness.app.util.UiAct.status(
+            req.action,
+            req.ref,
+            !after.sameScreen(before),
+            observed.settled,
+            android.os.SystemClock.uptimeMillis() - started,
+            after);
+    if (!req.snapshot) return head;
+    String body =
+        req.changedOnly
+            ? after.diff(before)
+            : after.render(com.deepseekharness.app.util.UiSnapshot.Mode.parse(req.mode));
+    return head + '\n' + body;
+  }
+
+  /** 执行请求里的动作；成功返回 null，失败返回原语给出的稳定错误行。 */
+  private static String performAct(
+      com.deepseekharness.app.util.UiAct req, com.deepseekharness.app.util.UiSnapshot before) {
+    switch (req.action) {
+      case TAP:
+        return tapByRequest(req, before);
+      case TYPE:
+        return failureOf(uiInput(req.text));
+      case BACK:
+        return failureOf(uiKey("back"));
+      case HOME:
+        return failureOf(uiKey("home"));
+      case SWIPE:
+        return failureOf(
+            uiSwipe(
+                pointX(req.x1, req.fx1, before.width()),
+                pointY(req.y1, req.fy1, before.height()),
+                pointX(req.x2, req.fx2, before.width()),
+                pointY(req.y2, req.fy2, before.height()),
+                req.durationMs));
+      case SCROLL:
+        return scroll(req.direction, before);
+      default:
+        return null;
+    }
+  }
+
+  /** 点按优先级：ref（带 expect 防串位）→ 文字 → 坐标，和 /app/ui/tap 一致。 */
+  private static String tapByRequest(
+      com.deepseekharness.app.util.UiAct req, com.deepseekharness.app.util.UiSnapshot before) {
+    if (req.ref > 0) {
+      com.deepseekharness.app.util.UiAct.Resolved resolved =
+          com.deepseekharness.app.util.UiAct.resolveRef(lastSnapshot, before, req.ref, req.expect);
+      if (resolved.problem != null) return refFailure(resolved.problem, req, before);
+      return failureOf(uiTap(resolved.node.centerX(), resolved.node.centerY()));
+    }
+    if (!req.text.isEmpty()) return failureOf(uiTapText(req.text));
+    int x = req.x >= 0 ? req.x : com.deepseekharness.app.util.UiAct.pixel(req.fx, before.width());
+    int y = req.y >= 0 ? req.y : com.deepseekharness.app.util.UiAct.pixel(req.fy, before.height());
+    return failureOf(uiTap(x, y));
+  }
+
+  /** 旧 ref 不能用时的答复：哪一号、期望什么文字、原位现在是什么。 */
+  private static String refFailure(
+      String problem,
+      com.deepseekharness.app.util.UiAct req,
+      com.deepseekharness.app.util.UiSnapshot before) {
+    StringBuilder sb = new StringBuilder("[ERR] ").append(problem).append(" ref=").append(req.ref);
+    if (!req.expect.isEmpty()) sb.append(" expect=\"").append(req.expect).append('"');
+    com.deepseekharness.app.util.UiNode at = before.byRef(req.ref);
+    if (at != null) sb.append(" actual=\"").append(at.label).append('"');
+    sb.append(" screen=").append(before.screenId());
+    if (before.truncated()) sb.append(" (tree truncated)");
+    if (problem.equals("REF_NO_DUMP")) sb.append(" (call /app/ui/dump first)");
+    if (problem.equals("REF_AMBIGUOUS"))
+      sb.append(" (duplicate controls changed; re-read with /app/ui/dump)");
+    return sb.toString();
+  }
+
+  /** Label of a ref from the last dump, for the confirmation dialog; empty when unknown. */
+  public static String lastLabel(int ref) {
+    com.deepseekharness.app.util.UiSnapshot snap = lastSnapshot;
+    if (snap == null || ref <= 0) return "";
+    com.deepseekharness.app.util.UiNode node = snap.byRef(ref);
+    return node == null ? "" : node.label;
+  }
+
+  /** 按方向把屏幕三等分划一条滚动；对任何可滚区域都适用，不依赖某个节点的滚动动作。 */
+  private static String scroll(String direction, com.deepseekharness.app.util.UiSnapshot before) {
+    int width = before.width(), height = before.height();
+    int cx = width / 2, cy = height / 2;
+    int dx = Math.max(1, width / 3), dy = Math.max(1, height / 3);
+    int x1, y1, x2, y2;
+    switch (direction) {
+      case "up":
+        x1 = cx;
+        y1 = cy - dy;
+        x2 = cx;
+        y2 = cy + dy;
+        break;
+      case "left":
+        x1 = cx - dx;
+        y1 = cy;
+        x2 = cx + dx;
+        y2 = cy;
+        break;
+      case "right":
+        x1 = cx + dx;
+        y1 = cy;
+        x2 = cx - dx;
+        y2 = cy;
+        break;
+      case "down":
+      default:
+        x1 = cx;
+        y1 = cy + dy;
+        x2 = cx;
+        y2 = cy - dy;
+        break;
+    }
+    return failureOf(uiSwipe(x1, y1, x2, y2, 300));
+  }
+
+  /** 等界面停下：连续两次快照相同才算稳定，最多等到 settleMs。 */
+  private static com.deepseekharness.app.util.UiAct.Observation settle(
+      DshaAccessibilityService s, com.deepseekharness.app.util.UiSnapshot before, int settleMs) {
+    com.deepseekharness.app.util.UiSnapshot current = before;
+    if (settleMs <= 0) return new com.deepseekharness.app.util.UiAct.Observation(current, false);
+    long deadline = android.os.SystemClock.uptimeMillis() + settleMs;
+    int stable = 0;
+    while (android.os.SystemClock.uptimeMillis() < deadline) {
+      try {
+        Thread.sleep(SETTLE_POLL_MS);
+      } catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+        break;
+      }
+      com.deepseekharness.app.util.UiSnapshot next;
+      try {
+        next = snapshotNow(s);
+      } catch (TargetChangedException changed) {
+        // Переход в другое окно (диалог, новая Activity) — это тоже «экран изменился», а не «ничего
+        // не произошло»: иначе агент решит, что тап не сработал, и повторит «отправить/оплатить».
+        return new com.deepseekharness.app.util.UiAct.Observation(current, false, true);
+      } catch (Throwable stop) {
+        break;
+      }
+      if (next == null) break;
+      stable = next.sameScreen(current) ? stable + 1 : 0;
+      current = next;
+      if (stable >= com.deepseekharness.app.util.UiAct.STABLE_POLLS)
+        return new com.deepseekharness.app.util.UiAct.Observation(current, true);
+    }
+    return new com.deepseekharness.app.util.UiAct.Observation(current, false);
+  }
+
+  /** 原语成功返回 null；失败原样返回它给的错误行，方便直接回给调用方。 */
+  private static String failureOf(String reply) {
+    if (reply == null) return "[ERR] ACT_EMPTY_REPLY";
+    if (reply.startsWith("[ERR]") || reply.equals(ScreenActionResult.NOT_EXECUTED_REPLY))
+      return reply;
+    return null;
+  }
+
+  private static int pointX(int pixel, double fraction, int width) {
+    return pixel >= 0 ? pixel : com.deepseekharness.app.util.UiAct.pixel(fraction, width);
+  }
+
+  private static int pointY(int pixel, double fraction, int height) {
+    return pixel >= 0 ? pixel : com.deepseekharness.app.util.UiAct.pixel(fraction, height);
   }
 
   /**
