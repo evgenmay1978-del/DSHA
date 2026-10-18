@@ -13,6 +13,38 @@ generator = importlib.util.module_from_spec(generator_spec)
 generator_spec.loader.exec_module(generator)
 
 
+def java_string_literal(source, start):
+    """Decode the Java string literal that begins at the first quote at or after start."""
+    index, out = source.index('"', start) + 1, []
+    escapes = {'n': '\n', 't': '\t', '"': '"', '\\': '\\', "'": "'"}
+    while source[index] != '"':
+        if source[index] == '\\':
+            out.append(escapes[source[index + 1]]); index += 2
+        else:
+            out.append(source[index]); index += 1
+    return ''.join(out)
+
+
+class BridgeHelpTranslationTest(unittest.TestCase):
+    """/app/help is how the in-app agent learns the bridge; a cut English copy hides endpoints."""
+
+    def test_english_bridge_help_covers_every_line_endpoint_and_argument(self):
+        import json, re
+        root = Path(__file__).resolve().parents[1]
+        source = (root / 'app/src/main/java/com/deepseekharness/app/HttpShellService.java').read_text(encoding='utf-8')
+        template = java_string_literal(source, source.index('private String appHelp()'))
+        catalog = json.loads((root / 'tools/i18n/messages.json').read_text(encoding='utf-8'))
+        rows = [row for row in catalog if row.get('zh') == template and row.get('en')]
+        self.assertEqual(1, len(rows), 'appHelp() literal must have exactly one English translation')
+        english = rows[0]['en']
+        self.assertEqual(template.count('\n'), english.count('\n'), 'English help must keep every line')
+        self.assertEqual(generator.format_signature(template), generator.format_signature(english))
+        endpoints = set(re.findall(r'(?<![\w.])/(?:app|device)/[a-z_/]+|(?<![\w/])/(?:confirm|exec)\b', template))
+        self.assertTrue(endpoints)
+        self.assertEqual(set(), {name for name in endpoints if name not in english}, 'endpoints missing in English help')
+        self.assertIsNone(re.search(r'[㐀-鿿　-〿＀-￯]', english), 'no Chinese text in English help')
+
+
 class UiI18nInventoryTest(unittest.TestCase):
     def test_catalog_format_grammar_rejects_unsupported_and_preserves_argument_roles(self):
         self.assertEqual(['s','d'], generator.format_signature('%s %d%%'))
