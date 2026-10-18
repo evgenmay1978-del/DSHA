@@ -76,6 +76,16 @@ export function verifyRuntimeSession(directory,proof){
     }
     return true;
   }
+  // POSIX: bind the receipt's creator interpreter exactly as the Python consumer does (path, bytes,
+  // version). Windows delegates this to the full-precision worker above; without it a receipt edited
+  // to name a foreign interpreter was still honored by every Node consumer on Linux/macOS.
+  const creator=data.metadataRuntime;
+  if(!creator||typeof creator.python!=='string'||process.env.DSHA_PYTHON!==creator.python)throw Error('TEST_FIXTURE_SESSION_METADATA_RUNTIME_CHANGED');
+  let creatorStat;
+  try{creatorStat=fs.lstatSync(creator.python);}catch{throw Error('TEST_FIXTURE_SESSION_METADATA_RUNTIME_CHANGED');}
+  if(creatorStat.isSymbolicLink()||!creatorStat.isFile()||fs.realpathSync(creator.python)!==creator.python||sha(creator.python)!==creator.pythonSha256)throw Error('TEST_FIXTURE_SESSION_METADATA_RUNTIME_CHANGED');
+  const creatorVersion=spawnSync(creator.python,['-I','-c','import sys;print(sys.version.split()[0])'],{encoding:'utf8',timeout:30000,maxBuffer:4096});
+  if(creatorVersion.error||creatorVersion.status!==0||creatorVersion.stdout.trim()!==creator.pythonVersion)throw Error('TEST_FIXTURE_SESSION_METADATA_RUNTIME_CHANGED');
   const rootStat=fs.lstatSync(selected,{bigint:true});
   if(rootStat.isSymbolicLink()||!rootStat.isDirectory()||rootStat.dev.toString()!==record.metadata?.root?.dev||rootStat.ino.toString()!==record.metadata?.root?.ino)throw Error('TEST_FIXTURE_SESSION_ROOT_CHANGED');
   const entries={};let count=0;

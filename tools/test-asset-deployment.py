@@ -1,8 +1,27 @@
 #!/usr/bin/env python3
 """Real isolated asset selections/contract traversal; no APK or user files."""
-import hashlib,json,tempfile,unittest
+import hashlib,importlib.util,json,os,tempfile,unittest
 from pathlib import Path
 from asset_deployment import selected_assets,verify_reader_contracts,load_manifest,ROOT
+
+def clean_checkout_archives():
+    """Same derivation the descriptor source check uses: only ci-assets archive names may be absent."""
+    spec=importlib.util.spec_from_file_location('deployment_descriptor_source',ROOT/'tools/verify-runtime-descriptor-source.py')
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    return frozenset(module.archive_inputs(ROOT))
+
+def defer_absent_archives(source,manifest,archives):
+    """Clean-checkout view of the real manifest; the production checker stays untouched and strict.
+
+    A named generated archive that is wholly absent (no file, no link) moves from packagedFiles to
+    externalGeneratedFiles, so reader contracts still treat it as deployed. A link in its place or any
+    other missing packaged file still fails the unchanged strict checks."""
+    source=Path(source);absent={name for name in manifest['packagedFiles']
+                                if name in archives and not (source/name).exists() and not (source/name).is_symlink()}
+    adjusted=dict(manifest)
+    adjusted['packagedFiles']=[name for name in manifest['packagedFiles'] if name not in absent]
+    adjusted['externalGeneratedFiles']=list(manifest['externalGeneratedFiles'])+sorted(absent)
+    return adjusted,absent
 
 class Deployment(unittest.TestCase):
     def setUp(self):
@@ -51,8 +70,33 @@ class Deployment(unittest.TestCase):
         self.verify()
         file=self.repo/'manifest.json';bad=dict(self.manifest);bad['sourceTransforms']={'original.tgz':'undeclared.bin'};file.write_text(json.dumps(bad))
         with self.assertRaisesRegex(ValueError,'TRANSFORM'):load_manifest(file)
+    def test_deferred_archive_may_be_absent_only_when_named(self):
+        self.manifest['packagedFiles'].append('big.bin')
+        self.doc('managed-runtime-inputs.json',{'installs':[{'asset':'big.bin'}],'assetFiles':['known.txt'],'assetTrees':['web-integration']})
+        with self.assertRaisesRegex(ValueError,'ASSET_DEPLOYMENT_MISSING:big.bin'):self.verify()
+        adjusted,absent=defer_absent_archives(self.source,self.manifest,{'other.bin'})
+        self.assertEqual(absent,set(),'an archive that is not named stays mandatory')
+        with self.assertRaisesRegex(ValueError,'ASSET_DEPLOYMENT_MISSING:big.bin'):verify_reader_contracts(self.source,adjusted,self.repo)
+        adjusted,absent=defer_absent_archives(self.source,self.manifest,{'big.bin'})
+        self.assertEqual(absent,{'big.bin'});verify_reader_contracts(self.source,adjusted,self.repo)
+        self.put('big.bin','present')
+        adjusted,absent=defer_absent_archives(self.source,self.manifest,{'big.bin'})
+        self.assertEqual(absent,set())
+        self.assertIn('big.bin',{p.as_posix() for _,p in selected_assets(self.source,adjusted)},'a present archive is selected and checked as usual')
+    def test_deferral_never_excuses_links_or_other_packaged_files(self):
+        self.manifest['packagedFiles'].append('big.bin')
+        os.symlink(self.source/'known.txt',self.source/'big.bin')
+        adjusted,absent=defer_absent_archives(self.source,self.manifest,{'big.bin'})
+        self.assertEqual(absent,set())
+        with self.assertRaisesRegex(ValueError,'big.bin'):verify_reader_contracts(self.source,adjusted,self.repo)
+        (self.source/'big.bin').unlink();(self.source/'known.txt').unlink()
+        adjusted,absent=defer_absent_archives(self.source,self.manifest,{'big.bin'})
+        with self.assertRaisesRegex(ValueError,'ASSET_DEPLOYMENT_MISSING:known.txt'):verify_reader_contracts(self.source,adjusted,self.repo)
     def test_current_project_deployment_and_retirement_boundary(self):
-        manifest=load_manifest();verify_reader_contracts(ROOT/'app/src/main/assets',manifest)
+        archives=clean_checkout_archives()
+        self.assertTrue(archives and all(name.endswith(('.bin','.tar.gz')) for name in archives))
+        manifest,absent=defer_absent_archives(ROOT/'app/src/main/assets',load_manifest(),archives)
+        verify_reader_contracts(ROOT/'app/src/main/assets',manifest)
         selected={p.as_posix() for _,p in selected_assets(ROOT/'app/src/main/assets',manifest)}
         for name in ['selftest.py','rootfs-confirm-install.sh','pnpm-env-fix.sh','backup-prepare.py','restore-merge.py','startup-checkpoints.py','startup-recovery.py','dsh-deps-heal.sh','fix-stale-bundles.sh','flatten-l2s.py','fs-write-patch.sh','heal-pnpm-shells.py','heal-profile-boot.py','heal-session.sh','heal-sessions.py','migrate-public-data.sh','webserver-auth-patch.sh','webui-degrade-patch.sh','webui-origin-port-patch.sh','webui-polyfill.sh','environment-data.py']:
             self.assertNotIn(name,selected)

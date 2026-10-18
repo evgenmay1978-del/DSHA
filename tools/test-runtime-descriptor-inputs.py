@@ -12,8 +12,18 @@ checker_spec = importlib.util.spec_from_file_location('descriptor_source_checker
                                                      ROOT / 'tools/verify-runtime-descriptor-source.py')
 checker = importlib.util.module_from_spec(checker_spec)
 checker_spec.loader.exec_module(checker)
-source_proof = checker.verify(ROOT)
 launchers = launcher_paths(ROOT, spec)
+claimed_launchers = json.loads((ROOT / 'app/src/main/assets/runtime-descriptor.json').read_text(encoding='utf8'))['launcherInputs']
+# A clean checkout lacks generated natives (the bxroot libraries are never in git). Only claimed jniLibs
+# .so may be absent; anything else missing still fails. Then native bytes are deferred exactly as the
+# CI contract step's `verify-runtime-descriptor-source.py --source-only` does (natives are build outputs
+# here, so source-level checks never byte-compare them). With every native present this stays the full
+# verification as before.
+absent_launchers = sorted(set(claimed_launchers) - set(launchers))
+if any(not (name.startswith(('app/src/main/jniLibs/', 'app/src/low/jniLibs/')) and name.endswith('.so'))
+       for name in absent_launchers):
+    raise SystemExit('DESCRIPTOR_LAUNCHER_SOURCE_MISSING: ' + ','.join(absent_launchers))
+source_proof = checker.verify(ROOT, source_only=bool(absent_launchers))
 installer = (ROOT / 'app/src/main/java/com/deepseekharness/app/runtime/RuntimeTools.java').read_text(encoding='utf8')
 if '"managed-runtime-inputs.json"' not in installer or 'manifest.getJSONArray("installs")' not in installer:
     raise SystemExit('RuntimeTools 未消费受管输入契约')
@@ -39,4 +49,4 @@ task = gradle.split('def prepareRuntimeDescriptor = tasks.register("prepareRunti
 for required in ['inputs.file(runtimeInputContractFile)', 'runtimeInputContract.assetFiles', 'runtimeInputContract.installs', 'runtimeInputContract.assetTrees', 'runtimeInputContract.launcherTrees', 'runtimeInputContract.launcherSources', 'tools/runtime_input_contract.py', 'tools/dsh-runtime/package.json']:
     if required not in task:
         raise SystemExit('Gradle 未消费完整输入契约: ' + required)
-print(f'单源运行时输入契约通过：{len(spec["installs"])} 安装项、{len(identified)} 资产、{len(launchers)} 启动输入；缺失离线归档待完整 package 核验：{source_proof["deferredArchives"]}')
+print(f'单源运行时输入契约通过：{len(spec["installs"])} 安装项、{len(identified)} 资产、{len(launchers)} 启动输入；缺失离线归档待完整 package 核验：{source_proof["deferredArchives"]}；缺失原生库待 package 核验：{absent_launchers}')
