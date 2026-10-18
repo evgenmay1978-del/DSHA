@@ -151,14 +151,30 @@ public final class UiAct {
 
   /** First result line: what was done, whether the screen changed and how long settling took. */
   public static String status(
-      Action action, int ref, boolean changed, long waitedMs, UiSnapshot screen) {
+      Action action, int ref, boolean changed, boolean settled, long waitedMs, UiSnapshot screen) {
     StringBuilder sb = new StringBuilder("ok action=").append(action.token());
     if (ref > 0) sb.append(" ref=").append(ref);
     sb.append(" changed=").append(changed);
+    sb.append(" settled=").append(settled);
     sb.append(" waited=").append(Math.max(0, waitedMs)).append("ms");
     sb.append(" screen=").append(screen.screenId());
     sb.append(" nodes=").append(screen.nodes().size());
     return sb.toString();
+  }
+
+  /**
+   * One observation of the screen: what it looked like and whether it stopped moving before the
+   * settle window expired. {@code settled=false} tells the caller the reply is a snapshot of a
+   * still-animating screen, not the final state.
+   */
+  public static final class Observation {
+    public final UiSnapshot screen;
+    public final boolean settled;
+
+    public Observation(UiSnapshot screen, boolean settled) {
+      this.screen = screen;
+      this.settled = settled;
+    }
   }
 
   /** Mutable request builder; {@link #build()} rejects actions that cannot be performed. */

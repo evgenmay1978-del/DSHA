@@ -107,11 +107,14 @@ public class UiActTest {
         UiSnapshot.builder().window("com.example", "").display(0, 1080, 2400, 440, 0);
     builder.add("Button", "", "Отправить", UiNode.CLICK, 0, 0, 10, 10);
     UiSnapshot snap = builder.build();
-    String line = UiAct.status(UiAct.Action.TAP, 3, true, 420, snap);
-    assertTrue(line.startsWith("ok action=tap ref=3 changed=true waited=420ms"));
+    String line = UiAct.status(UiAct.Action.TAP, 3, true, true, 420, snap);
+    assertTrue(line.startsWith("ok action=tap ref=3 changed=true settled=true waited=420ms"));
     assertTrue(line.contains("screen=" + snap.screenId()));
     assertTrue(line.contains("nodes=1"));
-    assertFalse(UiAct.status(UiAct.Action.LOOK, 0, false, 0, snap).contains("ref="));
+    assertFalse(UiAct.status(UiAct.Action.LOOK, 0, false, false, 0, snap).contains("ref="));
+    assertTrue(
+        UiAct.status(UiAct.Action.TAP, 0, false, false, 1500, snap)
+            .contains("changed=false settled=false waited=1500ms"));
   }
 
   @Test

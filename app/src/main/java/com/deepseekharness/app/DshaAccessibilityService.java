@@ -617,16 +617,18 @@ public class DshaAccessibilityService extends AccessibilityService {
       String failure = performAct(req, before);
       if (failure != null) return failure;
     }
-    com.deepseekharness.app.util.UiSnapshot after =
+    com.deepseekharness.app.util.UiAct.Observation observed =
         req.action == com.deepseekharness.app.util.UiAct.Action.LOOK
-            ? before
+            ? new com.deepseekharness.app.util.UiAct.Observation(before, true)
             : settle(s, before, req.settleMs);
+    com.deepseekharness.app.util.UiSnapshot after = observed.screen;
     lastSnapshot = after;
     String head =
         com.deepseekharness.app.util.UiAct.status(
             req.action,
             req.ref,
             !after.sameScreen(before),
+            observed.settled,
             android.os.SystemClock.uptimeMillis() - started,
             after);
     if (!req.snapshot) return head;
@@ -730,10 +732,10 @@ public class DshaAccessibilityService extends AccessibilityService {
   }
 
   /** 等界面停下：连续两次快照相同才算稳定，最多等到 settleMs。 */
-  private static com.deepseekharness.app.util.UiSnapshot settle(
+  private static com.deepseekharness.app.util.UiAct.Observation settle(
       DshaAccessibilityService s, com.deepseekharness.app.util.UiSnapshot before, int settleMs) {
     com.deepseekharness.app.util.UiSnapshot current = before;
-    if (settleMs <= 0) return current;
+    if (settleMs <= 0) return new com.deepseekharness.app.util.UiAct.Observation(current, false);
     long deadline = android.os.SystemClock.uptimeMillis() + settleMs;
     int stable = 0;
     while (android.os.SystemClock.uptimeMillis() < deadline) {
@@ -752,9 +754,10 @@ public class DshaAccessibilityService extends AccessibilityService {
       if (next == null) break;
       stable = next.sameScreen(current) ? stable + 1 : 0;
       current = next;
-      if (stable >= com.deepseekharness.app.util.UiAct.STABLE_POLLS) break;
+      if (stable >= com.deepseekharness.app.util.UiAct.STABLE_POLLS)
+        return new com.deepseekharness.app.util.UiAct.Observation(current, true);
     }
-    return current;
+    return new com.deepseekharness.app.util.UiAct.Observation(current, false);
   }
 
   /** 原语成功返回 null；失败原样返回它给的错误行，方便直接回给调用方。 */
