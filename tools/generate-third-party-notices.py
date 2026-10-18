@@ -52,6 +52,21 @@ def native_members(root=ROOT):
                   for p in (root / f'app/src/{flavor}/jniLibs').rglob('*.so'))
 
 
+def locked_native_members(root=ROOT):
+    """Build outputs pinned by tools/bxroot/lock.json, not checked-in bytes.
+
+    A clean source checkout has no libbxroot*.so, so rendering the declarations from
+    whatever this checkout happens to contain made THIRD_PARTY_NOTICES_STALE on every
+    clean tree (and green again only on a machine that had already built the binaries).
+    """
+    lock = json.loads((Path(root) / 'tools/bxroot/lock.json').read_text(encoding='utf-8'))
+    return sorted('app/src/main/jniLibs/arm64-v8a/' + row['name'] for row in lock.get('artifacts', []))
+
+
+def declared_native_members(root=ROOT):
+    return sorted(set(native_members(root)) | set(locked_native_members(root)))
+
+
 def render():
     lock = json.loads((ROOT / 'tools/dsh-runtime/package-lock.json').read_text(encoding='utf-8'))
     mobile = json.loads((ASSETS / 'builtin-plugins/dsh-web-mobile/package.json').read_text(encoding='utf-8'))
@@ -69,7 +84,7 @@ def render():
                            for path, row in sorted(packages.items()) if path and row.get('license', 'unknown') not in PERMISSIVE)
     android = '\n'.join('- `' + coordinate + '`' for coordinate in gradle_coordinates())
     native = '\n'.join(f'| `{path}` | {NATIVE_NOTICES.get(Path(path).name, ("unknown", "new binary without reviewed source"))[0]} | {NATIVE_NOTICES.get(Path(path).name, ("unknown", "new binary without reviewed source"))[1]} |'
-                       for path in native_members())
+                       for path in declared_native_members())
     owned = '、'.join(f'`{row["name"]}` **{row["version"]}**' for row in owned_packages())
     hashes = '\n'.join(f'- `{name}`：`{hashlib.sha256((ASSETS / "builtin-plugins/dsh-web-mobile/lib" / name).read_bytes()).hexdigest()}`'
                        for name in ('client.js', 'index.js', 'compress.js', 'delete-session.js', 'reasoning-effort.js'))
