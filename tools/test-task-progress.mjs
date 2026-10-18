@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-import {createHash} from 'node:crypto';
-import {spawnSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import path from 'node:path';
-import {testRuntime} from './test-runtime-fixture.mjs';
 import {TaskReporter} from '../app/src/main/assets/builtin-plugins/dsh-task-notifier/lib/index.js';
 const session={id:'root-session',surface:{contentGeneration:1}}; let turn=7, open=42, cancel=0, idle=0, claim;
 const agent={session,status:'running',cancel(cause){assert.deepEqual(cause,{kind:'user'});cancel++},whenIdle(){idle++;return Promise.resolve()}};
@@ -118,14 +114,9 @@ const mismatchedContextReporter=new TaskReporter(replacedCtx,async operation=>op
 mismatchedContextReporter.event(nextSession,{type:'turn/start',data:{turn:1}});
 await mismatchedContextReporter.tick();assert.equal(mismatchedContextReporter.identity,undefined);
 mismatchedContextReporter.dispose();
-// Import the actual canonical rc2 scrubber used by bash/MCP/PTY launchers.
-const raw=testRuntime('raw');
-const subprocessSource=path.join(raw,'node_modules/@deepseek-ai/dsh-subprocess/lib/index.js');
-assert.equal(JSON.parse(readFileSync(path.join(raw,'node_modules/@deepseek-ai/dsh-subprocess/package.json'),'utf8')).version,'0.2.0-rc.2');
-const {scrubbedParentEnv}=await import(pathToFileURL(subprocessSource).href);
+// The canonical rc2 env scrubber and the scrubbed child CLI need the locked runtime fixture;
+// they live in tools/test-task-progress-runtime.mjs (runtime stage, like the other fixture tests).
 for(const [key,value]of Object.entries(webRegistration)) process.env[key]=value;
-const filtered=scrubbedParentEnv();
-for(const key of Object.keys(webRegistration)) assert.ok(!Object.hasOwn(filtered,key),'canonical rc2 scrubber must remove '+key+' even before notifier initialization');
 const hmrTraffic=[];
 const hmrTransport=async(operation,payload)=>{
   hmrTraffic.push({operation,payload});
@@ -154,15 +145,4 @@ const ThirdReporter=(await import(moduleUrl+'?hmr-regression=2')).TaskReporter;
 const thirdHmr=new ThirdReporter(replacedCtx,hmrTransport);
 assert.equal(secondHmr.disposed,true);assert.equal(thirdHmr.client,firstHmrClient);
 thirdHmr.event(nextSession,{type:'turn/start',data:{turn:1}});await thirdHmr.tick();thirdHmr.dispose();
-// Ordinary independent CLI inherits the real scrubbed child env and no process registry.
-const child=spawnSync(process.execPath,['--input-type=module','-e',`
-import {TaskReporter} from ${JSON.stringify(moduleUrl)};
-const session={id:'ordinary-cli',surface:{contentGeneration:0}};
-const agent={session,status:'running'};
-const ctx={webServer:{port:41821},agents:{get:()=>agent,roots:()=>[agent]},sessionProjections:{stateOf:()=>({lastTurn:1,openTurnStartSeq:1})}};
-let calls=0;const reporter=new TaskReporter(ctx,async()=>{calls++;return {}});
-reporter.event(session,{type:'turn/start',data:{turn:1}});await reporter.tick();reporter.dispose();
-console.log(JSON.stringify({calls,ambient:['DSH_TASK_GENERATION','DSH_TASK_INSTANCE','DSH_TASK_TOKEN'].map(key=>Object.hasOwn(process.env,key))}));
-`],{env:scrubbedParentEnv(),encoding:'utf8',timeout:10000});
-assert.equal(child.status,0,child.stderr);assert.deepEqual(JSON.parse(child.stdout.trim()),{calls:0,ambient:[false,false,false]});
-console.log('task-progress: late Session/producer ownership, one-shot cancellation, real rc2 child scrub, ambient secret removal, independent CLI zero context, HMR client/sequence/lease continuity PASS; subprocess source SHA256='+createHash('sha256').update(readFileSync(subprocessSource)).digest('hex'));
+console.log('task-progress: late Session/producer ownership, one-shot cancellation, ambient secret removal, HMR client/sequence/lease continuity PASS; rc2 child scrub runs in test-task-progress-runtime.mjs');

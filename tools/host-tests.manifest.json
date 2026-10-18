@@ -1810,12 +1810,24 @@
       "path": "tools/test-task-progress.mjs",
       "stage": "fast",
       "requires": [
+        "node24"
+      ],
+      "args": [],
+      "timeoutSeconds": 180,
+      "reason": "Current isolated task-notifier source fixture: ownership, cancellation, ambient secret removal and HMR continuity; no Android device, live model request, user data or runtime archive",
+      "environment": {},
+      "cli": "no positional arguments; explicit current fixture requirements"
+    },
+    {
+      "path": "tools/test-task-progress-runtime.mjs",
+      "stage": "runtime",
+      "requires": [
         "node24",
         "raw"
       ],
       "args": [],
       "timeoutSeconds": 180,
-      "reason": "Current build172 isolated source/runtime fixture; no Android device, live model request or user data operations",
+      "reason": "Locked rc2 dsh-subprocess scrubber from the prepared runtime fixture removes task registration secrets and a scrubbed independent CLI publishes no task context",
       "environment": {},
       "cli": "no positional arguments; explicit current fixture requirements"
     },
