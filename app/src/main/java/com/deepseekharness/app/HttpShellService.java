@@ -1352,11 +1352,90 @@ public final class HttpShellService {
         }
         return DshaAccessibilityService.uiGesture(spec, what);
       }
+      if (r.equals("/app/act")) {
+        com.deepseekharness.app.util.UiAct req;
+        try {
+          req = actRequest(q);
+        } catch (IllegalArgumentException bad) {
+          return "[ERR] " + bad.getMessage();
+        }
+        if (req == null) return "[ERR] action= look|tap|type|scroll|back|home|swipe";
+        if (!uiAuthorizedForTarget(target, actDescription(req)))
+          return com.deepseekharness.app.util.UiText.text("[ERR] 未获得本次操作授权（未确认或已拒绝）");
+        return DshaAccessibilityService.uiAct(req);
+      }
       return com.deepseekharness.app.util.UiText.text("[ERR] 未知端点（可用：dump/tap/input/key/swipe）");
     } catch (DshaAccessibilityService.TargetChangedException changed) {
       return ScreenActionResult.NOT_EXECUTED_REPLY;
     } catch (Throwable t) {
       return "[ERR] " + SensitiveData.redact(String.valueOf(t));
+    }
+  }
+
+  /** /app/act 的参数解析；动作名不认识时返回 null，组合不成立时抛 IllegalArgumentException。 */
+  private com.deepseekharness.app.util.UiAct actRequest(String q) {
+    com.deepseekharness.app.util.UiAct.Action action =
+        com.deepseekharness.app.util.UiAct.Action.parse(getParam(q, "action", "look"));
+    if (action == null) return null;
+    com.deepseekharness.app.util.UiAct.Builder b =
+        new com.deepseekharness.app.util.UiAct.Builder()
+            .action(action)
+            .ref(intParam(q, "ref", 0))
+            .expect(getParam(q, "expect", ""))
+            .settleMs(
+                intParam(q, "settle_ms", com.deepseekharness.app.util.UiAct.DEFAULT_SETTLE_MS))
+            .changedOnly(uiFlag(q, "changed_only") || uiFlag(q, "changed"))
+            .snapshot(!"0".equals(getParam(q, "snapshot", "1")))
+            .mode(getParam(q, "mode", "outline"));
+    String text = getParam(q, "text", null);
+    if (text != null) b.text(text);
+    int x = intParam(q, "x", com.deepseekharness.app.util.UiAct.ABSENT);
+    int y = intParam(q, "y", com.deepseekharness.app.util.UiAct.ABSENT);
+    if (x >= 0 && y >= 0) b.at(x, y);
+    double fx = doubleParam(q, "fx", -1), fy = doubleParam(q, "fy", -1);
+    if (fx >= 0 && fy >= 0) b.atFraction(fx, fy);
+    if (action == com.deepseekharness.app.util.UiAct.Action.SWIPE) {
+      int x1 = intParam(q, "x1", com.deepseekharness.app.util.UiAct.ABSENT);
+      int y1 = intParam(q, "y1", com.deepseekharness.app.util.UiAct.ABSENT);
+      int x2 = intParam(q, "x2", com.deepseekharness.app.util.UiAct.ABSENT);
+      int y2 = intParam(q, "y2", com.deepseekharness.app.util.UiAct.ABSENT);
+      int ms = intParam(q, "ms", 300);
+      if (x1 >= 0 && y1 >= 0 && x2 >= 0 && y2 >= 0) b.swipe(x1, y1, x2, y2, ms);
+      else
+        b.swipeFraction(
+            doubleParam(q, "fx1", -1),
+            doubleParam(q, "fy1", -1),
+            doubleParam(q, "fx2", -1),
+            doubleParam(q, "fy2", -1),
+            ms);
+    }
+    if (action == com.deepseekharness.app.util.UiAct.Action.SCROLL)
+      b.direction(getParam(q, "direction", "down"));
+    return b.build();
+  }
+
+  /** 一次动作在授权框里怎么描述：让用户看到具体要发生什么，而不是抽象端点名。 */
+  private static String actDescription(com.deepseekharness.app.util.UiAct req) {
+    switch (req.action) {
+      case LOOK:
+        return com.deepseekharness.app.util.UiText.text("读取当前屏幕上的文字与控件");
+      case TAP:
+        if (req.ref > 0) return com.deepseekharness.app.util.UiText.format("点击控件 #%d", req.ref);
+        if (!req.text.isEmpty())
+          return com.deepseekharness.app.util.UiText.format("点击「%s」", shortText(req.text));
+        return com.deepseekharness.app.util.UiText.format("点击坐标 (%d,%d)", req.x, req.y);
+      case TYPE:
+        return req.text.isEmpty()
+            ? com.deepseekharness.app.util.UiText.choose("清空当前输入框", "Clear the current input field")
+            : com.deepseekharness.app.util.UiText.format("在输入框里填入「%s」", shortText(req.text));
+      case SCROLL:
+        return com.deepseekharness.app.util.UiText.format("滑动屏幕（%s）", req.direction);
+      case SWIPE:
+        return com.deepseekharness.app.util.UiText.text("滑动屏幕");
+      case HOME:
+        return com.deepseekharness.app.util.UiText.text("回到桌面");
+      default:
+        return com.deepseekharness.app.util.UiText.text("返回上一屏");
     }
   }
 
@@ -1491,6 +1570,14 @@ public final class HttpShellService {
   private int intParam(String q, String k, int def) {
     try {
       return Integer.parseInt(getParam(q, k, String.valueOf(def)).trim());
+    } catch (Exception e) {
+      return def;
+    }
+  }
+
+  private double doubleParam(String q, String k, double def) {
+    try {
+      return Double.parseDouble(getParam(q, k, String.valueOf(def)).trim());
     } catch (Exception e) {
       return def;
     }

@@ -13,6 +13,13 @@
 - 几何在 `UiGesture`（不依赖 Android，宿主 JUnit 覆盖端点与插值）里算好，服务只把每根手指的折线翻成 `Path` 派发；负坐标、零半径、超过系统同屏触点上限时直接回 `[ERR]`，不派发。
 - 手势的等待上限按手势自身时长计算（此前固定等 6 秒，超过 6 秒的长按会被误报为超时）。
 
+### `/app/act`
+- 新增 `/app/act?action=look|tap|type|scroll|back|home|swipe`：一次调用完成「动作 + 等界面停下 + 回差异」，省掉「点一下再 dump」的往返。
+- `tap` 支持 `ref`（配合 `expect` 防 ref 串位：文字不符时回 `REF_STALE`，绝不盲点）、`text`、`x,y` 或 `fx,fy` 比例坐标；`swipe` 支持像素或比例端点；`scroll` 按方向把屏幕三等分划一次。
+- `settle_ms`（默认 1500，上限 5000）内连续两次快照相同才算稳定；首行 `changed=true|false` 直接回答「这一下到底有没有生效」，`changed_only=1` 时正文只回与动作前的差异。
+- 纯逻辑在 `UiAct`（不依赖 Android，宿主 JUnit 覆盖动作词表、ref 守卫、比例坐标与结果行）；服务只负责执行与轮询。
+- 运行时描述符 `launcherInputs` 随 `DshaAccessibilityService`/`HttpShellService` 重算，`runtimeId` 随之变化。
+
 - 修复格式清单漏登：`BoundedGuestBootRecovery` 及其测试由 `[skip ci]` 同步提交引入但未进入 `java-format-files.json`，导致 `format-java-tree --check` 在 main 上失败；两文件本身已符合格式，未改代码。
 
 ## 0.2.0-rc2.1 · build172（2026-10-14，本地软件交付）

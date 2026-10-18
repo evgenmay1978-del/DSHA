@@ -80,6 +80,25 @@ public final class UiSnapshot {
     return Long.toHexString(h);
   }
 
+  public int width() {
+    return width;
+  }
+
+  public int height() {
+    return height;
+  }
+
+  /** True when the tree walk hit its budget, so the agent knows the view is partial. */
+  public boolean truncated() {
+    return truncated;
+  }
+
+  /** True when two reads describe the same screen and the same per-node states. */
+  public boolean sameScreen(UiSnapshot other) {
+    if (other == this) return true;
+    return other != null && screenId().equals(other.screenId()) && sameStates(other);
+  }
+
   private static long mix(long h, String s) {
     if (s != null) for (int i = 0; i < s.length(); i++) h = h * 31 + s.charAt(i);
     return h * 1099511628211L;
