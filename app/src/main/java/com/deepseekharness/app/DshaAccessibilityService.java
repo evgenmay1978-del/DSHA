@@ -621,6 +621,14 @@ public class DshaAccessibilityService extends AccessibilityService {
         req.action == com.deepseekharness.app.util.UiAct.Action.LOOK
             ? new com.deepseekharness.app.util.UiAct.Observation(before, true)
             : settle(s, before, req.settleMs);
+    if (observed.targetChanged) {
+      // 动作已经落地，但 экран ушёл в другое окно: снимок «до» больше не описывает происходящее,
+      // поэтому не выдаём changed=false и не трогаем lastSnapshot — отправляем за новым dump.
+      return com.deepseekharness.app.util.UiAct.statusTransition(
+              req.action, req.ref, android.os.SystemClock.uptimeMillis() - started)
+          + '\n'
+          + "target changed during settle; re-read the new window with /app/ui/dump";
+    }
     com.deepseekharness.app.util.UiSnapshot after = observed.screen;
     lastSnapshot = after;
     String head =
@@ -670,10 +678,10 @@ public class DshaAccessibilityService extends AccessibilityService {
   private static String tapByRequest(
       com.deepseekharness.app.util.UiAct req, com.deepseekharness.app.util.UiSnapshot before) {
     if (req.ref > 0) {
-      com.deepseekharness.app.util.UiNode node = before.byRef(req.ref);
-      String problem = com.deepseekharness.app.util.UiAct.refProblem(node, req.expect);
-      if (problem != null) return refFailure(problem, req, node, before);
-      return failureOf(uiTap(node.centerX(), node.centerY()));
+      com.deepseekharness.app.util.UiAct.Resolved resolved =
+          com.deepseekharness.app.util.UiAct.resolveRef(lastSnapshot, before, req.ref, req.expect);
+      if (resolved.problem != null) return refFailure(resolved.problem, req, before);
+      return failureOf(uiTap(resolved.node.centerX(), resolved.node.centerY()));
     }
     if (!req.text.isEmpty()) return failureOf(uiTapText(req.text));
     int x = req.x >= 0 ? req.x : com.deepseekharness.app.util.UiAct.pixel(req.fx, before.width());
@@ -685,14 +693,23 @@ public class DshaAccessibilityService extends AccessibilityService {
   private static String refFailure(
       String problem,
       com.deepseekharness.app.util.UiAct req,
-      com.deepseekharness.app.util.UiNode node,
       com.deepseekharness.app.util.UiSnapshot before) {
     StringBuilder sb = new StringBuilder("[ERR] ").append(problem).append(" ref=").append(req.ref);
     if (!req.expect.isEmpty()) sb.append(" expect=\"").append(req.expect).append('"');
-    if (node != null) sb.append(" actual=\"").append(node.label).append('"');
+    com.deepseekharness.app.util.UiNode at = before.byRef(req.ref);
+    if (at != null) sb.append(" actual=\"").append(at.label).append('"');
     sb.append(" screen=").append(before.screenId());
     if (before.truncated()) sb.append(" (tree truncated)");
+    if (problem.equals("REF_NO_DUMP")) sb.append(" (call /app/ui/dump first)");
     return sb.toString();
+  }
+
+  /** Label of a ref from the last dump, for the confirmation dialog; empty when unknown. */
+  public static String lastLabel(int ref) {
+    com.deepseekharness.app.util.UiSnapshot snap = lastSnapshot;
+    if (snap == null || ref <= 0) return "";
+    com.deepseekharness.app.util.UiNode node = snap.byRef(ref);
+    return node == null ? "" : node.label;
   }
 
   /** 按方向把屏幕三等分划一条滚动；对任何可滚区域都适用，不依赖某个节点的滚动动作。 */
@@ -748,6 +765,10 @@ public class DshaAccessibilityService extends AccessibilityService {
       com.deepseekharness.app.util.UiSnapshot next;
       try {
         next = snapshotNow(s);
+      } catch (TargetChangedException changed) {
+        // Переход в другое окно (диалог, новая Activity) — это тоже «экран изменился», а не «ничего
+        // не произошло»: иначе агент решит, что тап не сработал, и повторит «отправить/оплатить».
+        return new com.deepseekharness.app.util.UiAct.Observation(current, false, true);
       } catch (Throwable stop) {
         break;
       }

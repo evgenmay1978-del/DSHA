@@ -1420,7 +1420,16 @@ public final class HttpShellService {
       case LOOK:
         return com.deepseekharness.app.util.UiText.text("读取当前屏幕上的文字与控件");
       case TAP:
-        if (req.ref > 0) return com.deepseekharness.app.util.UiText.format("点击控件 #%d", req.ref);
+        if (req.ref > 0) {
+          // В ручном режиме пользователь подтверждает не «#12», а конкретный контрол: берём label
+          // из expect, а если его нет — из последнего dump, который видел агент.
+          String label =
+              !req.expect.isEmpty() ? req.expect : DshaAccessibilityService.lastLabel(req.ref);
+          if (label.isEmpty())
+            return com.deepseekharness.app.util.UiText.format("点击控件 #%d", req.ref);
+          return com.deepseekharness.app.util.UiText.format(
+              "点击「%s」 (#%d)", shortText(label), req.ref);
+        }
         if (!req.text.isEmpty())
           return com.deepseekharness.app.util.UiText.format("点击「%s」", shortText(req.text));
         return com.deepseekharness.app.util.UiText.format("点击坐标 (%d,%d)", req.x, req.y);

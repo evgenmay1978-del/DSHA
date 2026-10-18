@@ -143,10 +143,37 @@ public final class UiAct {
    * The label check is what turns "ref reused by a rebuilt list" into a refusal instead of a tap on
    * whatever moved into that slot.
    */
-  public static String refProblem(UiNode node, String expect) {
-    if (node == null) return "REF_NOT_FOUND";
-    if (!node.labelContains(expect)) return "REF_STALE";
-    return null;
+  public static Resolved resolveRef(UiSnapshot seen, UiSnapshot now, int ref, String expect) {
+    if (seen == null) return new Resolved(null, "REF_NO_DUMP");
+    UiNode before = seen.byRef(ref);
+    if (before == null) return new Resolved(null, "REF_NOT_FOUND");
+    UiNode match = now.byIdentity(before.identity());
+    if (match == null) return new Resolved(null, "REF_STALE");
+    if (!match.labelContains(expect)) return new Resolved(null, "REF_STALE");
+    return new Resolved(match, null);
+  }
+
+  /** Result of {@link #resolveRef}: the node to act on, or the code naming why it is unsafe. */
+  public static final class Resolved {
+    public final UiNode node;
+    public final String problem;
+
+    public Resolved(UiNode node, String problem) {
+      this.node = node;
+      this.problem = problem;
+    }
+  }
+
+  /**
+   * Result line when the screen moved to another window while settling: the action did land, but the
+   * reply cannot describe the new screen, so the caller is pointed back to {@code /app/ui/dump}.
+   */
+  public static String statusTransition(Action action, int ref, long waitedMs) {
+    StringBuilder sb = new StringBuilder("ok action=").append(action.token());
+    if (ref > 0) sb.append(" ref=").append(ref);
+    sb.append(" changed=true targetChangedAfterExecution=true settled=false");
+    sb.append(" waited=").append(Math.max(0, waitedMs)).append("ms");
+    return sb.toString();
   }
 
   /** First result line: what was done, whether the screen changed and how long settling took. */
@@ -171,9 +198,17 @@ public final class UiAct {
     public final UiSnapshot screen;
     public final boolean settled;
 
+    /** True when the screen moved to another window while settling; the reply cannot describe it. */
+    public final boolean targetChanged;
+
     public Observation(UiSnapshot screen, boolean settled) {
+      this(screen, settled, false);
+    }
+
+    public Observation(UiSnapshot screen, boolean settled, boolean targetChanged) {
       this.screen = screen;
       this.settled = settled;
+      this.targetChanged = targetChanged;
     }
   }
 

@@ -84,12 +84,24 @@ public class UiActTest {
   }
 
   @Test
-  public void refGuardDistinguishesMissingFromStale() {
-    UiNode node = new UiNode(3, "Button", "", "Отправить", UiNode.CLICK, 0, 0, 10, 10);
-    assertNull(UiAct.refProblem(node, "отправ"));
-    assertNull(UiAct.refProblem(node, ""));
-    assertEquals("REF_STALE", UiAct.refProblem(node, "Черновик"));
-    assertEquals("REF_NOT_FOUND", UiAct.refProblem(null, "Отправить"));
+  public void refResolvesByIdentityNotByPosition() {
+    UiSnapshot seen = snapshotOf("Отправить", "Черновик");
+    // A row appeared above, so the same ref now names a different control.
+    UiSnapshot now = snapshotOf("Новое", "Отправить", "Черновик");
+    UiAct.Resolved resolved = UiAct.resolveRef(seen, now, 2, "");
+    assertNull(resolved.problem);
+    assertEquals("Черновик", resolved.node.label);
+    assertEquals(3, resolved.node.ref);
+  }
+
+  @Test
+  public void refGuardRefusesWhenTheNodeIsGoneOrTheExpectMismatches() {
+    UiSnapshot seen = snapshotOf("Отправить");
+    UiSnapshot now = snapshotOf("Отмена");
+    assertEquals("REF_STALE", UiAct.resolveRef(seen, now, 1, "").problem);
+    assertEquals("REF_STALE", UiAct.resolveRef(seen, now, 1, "Отправить").problem);
+    assertEquals("REF_NO_DUMP", UiAct.resolveRef(null, now, 1, "").problem);
+    assertEquals("REF_NOT_FOUND", UiAct.resolveRef(seen, now, 9, "").problem);
   }
 
   @Test
@@ -115,6 +127,10 @@ public class UiActTest {
     assertTrue(
         UiAct.status(UiAct.Action.TAP, 0, false, false, 1500, snap)
             .contains("changed=false settled=false waited=1500ms"));
+    assertTrue(
+        UiAct.statusTransition(UiAct.Action.TAP, 4, 700)
+            .startsWith(
+                "ok action=tap ref=4 changed=true targetChangedAfterExecution=true settled=false waited=700ms"));
   }
 
   @Test
@@ -125,6 +141,13 @@ public class UiActTest {
     assertTrue(one.sameScreen(same));
     assertFalse(one.sameScreen(changed));
     assertFalse(one.sameScreen(null));
+  }
+
+  private static UiSnapshot snapshotOf(String... labels) {
+    UiSnapshot.Builder builder =
+        UiSnapshot.builder().window("com.example", "").display(0, 1080, 2400, 440, 0);
+    for (String label : labels) builder.add("Button", "", label, UiNode.CLICK, 0, 0, 10, 10);
+    return builder.build();
   }
 
   private static UiSnapshot snapshot(String label, int left, int top, int right, int bottom) {

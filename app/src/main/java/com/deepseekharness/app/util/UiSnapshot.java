@@ -61,6 +61,12 @@ public final class UiSnapshot {
     return null;
   }
 
+  /** First node with the same identity (class + id + label); refs are positional, identity is not. */
+  public UiNode byIdentity(String identity) {
+    for (UiNode n : nodes) if (n.identity().equals(identity)) return n;
+    return null;
+  }
+
   /**
    * A stable fingerprint of the screen's structure: window identity plus each node's class, id,
    * label and action flags (not its exact pixel bounds, which jitter during animation). Equal ids
