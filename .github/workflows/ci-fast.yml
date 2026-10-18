@@ -59,7 +59,18 @@ jobs:
           echo "::notice title=sdkmanager::$manager"
           "$manager" "platforms;$platform" "build-tools;$buildtools"
           chmod +x gradlew
-          if ! ./gradlew :app:testStandardDebugUnitTest :app:testLowDebugUnitTest -x :app:prepareStandardAssets -x :app:prepareRecoveryAssets --no-daemon --max-workers=2; then
+          # preBuild gates the build on generated offline inputs: bxroot natives (verifyBxrootNative /
+          # verifyBxrootProjection rebuild them from lock and compare bytes) and the runtime descriptor
+          # (prepareRuntimeDescriptor needs dsh-runtime.bin / offline-rootfs.bin / ubuntu-tools.bin).
+          # A clean clone has none of them, and this job's contract is "unit tests without offline
+          # package generation" — so they are excluded here and stay enforced in ci-package, which
+          # restores the exact inputs. Step 6 still verifies the descriptor source-only, and
+          # tools/run-host-tests.py --stage fast still runs the archive-free regressions.
+          if ! ./gradlew :app:testStandardDebugUnitTest :app:testLowDebugUnitTest \
+              -x :app:prepareStandardAssets -x :app:prepareRecoveryAssets \
+              -x :app:verifyBxrootNative -x :app:verifyBxrootProjection \
+              -x :app:prepareRuntimeDescriptor -x :app:verifyRuntimeDescriptorInputs \
+              --no-daemon --max-workers=2; then
             python3 - <<'PY'
           import glob, xml.etree.ElementTree as ET
           failed = []
