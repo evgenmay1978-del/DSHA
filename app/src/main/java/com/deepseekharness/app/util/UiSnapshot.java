@@ -99,17 +99,40 @@ public final class UiSnapshot {
     return sb.toString();
   }
 
+  /** Longest label kept per node; longer text is cut with an ellipsis. */
+  public static final int LABEL_LIMIT = 160;
+
+  /** Reply ceiling in characters, matching the previous dumper's ~12 KB stop. */
+  public static final int OUTPUT_LIMIT = 12000;
+
   /** Full dump for a first read or an explicit full request. */
   public String render(Mode mode) {
     StringBuilder sb = new StringBuilder(header()).append('\n');
-    int shown = 0;
+    List<String> lines = new ArrayList<>();
     for (UiNode n : nodes) {
       if (mode == Mode.OUTLINE && !n.actionable()) continue;
-      sb.append(n.render()).append('\n');
-      shown++;
+      lines.add(n.render());
     }
-    if (shown == 0) sb.append("(no reportable nodes)\n");
+    if (lines.isEmpty()) sb.append("(no reportable nodes)\n");
+    appendBounded(sb, lines);
     return sb.toString();
+  }
+
+  /**
+   * Appends lines until the reply would pass {@link #OUTPUT_LIMIT}, then says how many were cut so
+   * the agent knows the view is partial instead of silently missing controls.
+   */
+  private static void appendBounded(StringBuilder sb, List<String> lines) {
+    for (int i = 0; i < lines.size(); i++) {
+      String line = lines.get(i);
+      if (sb.length() + line.length() + 1 > OUTPUT_LIMIT) {
+        sb.append("(output limit: ")
+            .append(lines.size() - i)
+            .append(" more lines not shown; use mode=outline or changed_only=1)\n");
+        return;
+      }
+      sb.append(line).append('\n');
+    }
   }
 
   /**
@@ -122,7 +145,9 @@ public final class UiSnapshot {
    */
   public String diff(UiSnapshot prev) {
     if (prev == null) return render(Mode.FULL);
-    if (prev.screenId().equals(screenId())) {
+    // The fingerprint ignores focus on purpose (focus is not structure), so a focus move between
+    // identical fields must still fall through to the per-node state comparison below.
+    if (prev.screenId().equals(screenId()) && sameStates(prev)) {
       return header() + "\nunchanged (same screen as previous dump)\n";
     }
     List<UiNode> added = new ArrayList<>();
@@ -154,10 +179,21 @@ public final class UiSnapshot {
         .append(" =")
         .append(same)
         .append('\n');
-    for (UiNode n : added) sb.append("+ ").append(n.render()).append('\n');
-    for (UiNode n : changed) sb.append("~ ").append(n.render()).append('\n');
-    for (UiNode n : gone) sb.append("- ").append(n.render()).append('\n');
+    List<String> lines = new ArrayList<>();
+    for (UiNode n : added) lines.add("+ " + n.render());
+    for (UiNode n : changed) lines.add("~ " + n.render());
+    for (UiNode n : gone) lines.add("- " + n.render());
+    appendBounded(sb, lines);
     return sb.toString();
+  }
+
+  /** Position-wise state equality; only meaningful when the fingerprints already match. */
+  private boolean sameStates(UiSnapshot prev) {
+    if (prev.nodes.size() != nodes.size()) return false;
+    for (int i = 0; i < nodes.size(); i++) {
+      if (stateFlags(prev.nodes.get(i)) != stateFlags(nodes.get(i))) return false;
+    }
+    return true;
   }
 
   private static int stateFlags(UiNode n) {
@@ -210,6 +246,8 @@ public final class UiSnapshot {
     /** Append the next reportable node; its ref is its 1-based position in traversal order. */
     public UiNode add(
         String cls, String id, String label, int flags, int left, int top, int right, int bottom) {
+      if (label != null && label.length() > LABEL_LIMIT)
+        label = label.substring(0, LABEL_LIMIT) + "…";
       UiNode node = new UiNode(nodes.size() + 1, cls, id, label, flags, left, top, right, bottom);
       nodes.add(node);
       return node;

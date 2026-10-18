@@ -670,7 +670,8 @@ public class DshaAccessibilityService extends AccessibilityService {
     }
     if (password) return;
     int cn = node.getChildCount();
-    for (int i = 0; i < cn; i++) {
+    // childSlot 先扣预算再跨进程取子节点：稀疏/超大的子列表不能绕过遍历上限（与虚拟屏 walker 一致）。
+    for (int i = 0; i < cn && budget.childSlot(b.size()); i++) {
       AccessibilityNodeInfo ch = node.getChild(i);
       if (ch == null) continue;
       try {

@@ -117,4 +117,44 @@ public final class UiSnapshotTest {
     assertTrue(n.labelContains(null));
     assertFalse(n.labelContains("отмена"));
   }
+
+  @Test
+  public void focusMoveBetweenIdenticalFieldsIsReportedNotUnchanged() {
+    UiSnapshot.Builder before = screen();
+    before.add("EditText", "", "", UiNode.EDIT | UiNode.FOCUSED, 0, 100, 1080, 200);
+    before.add("EditText", "", "", UiNode.EDIT, 0, 300, 1080, 400);
+    UiSnapshot.Builder after = screen();
+    after.add("EditText", "", "", UiNode.EDIT, 0, 100, 1080, 200);
+    after.add("EditText", "", "", UiNode.EDIT | UiNode.FOCUSED, 0, 300, 1080, 400);
+
+    UiSnapshot a = before.build(), b = after.build();
+    assertEquals("focus is not structure", a.screenId(), b.screenId());
+    String out = b.diff(a);
+    assertFalse(out.contains("unchanged"));
+    assertTrue(out.contains("[edit,focused]"));
+  }
+
+  @Test
+  public void longLabelsAreCutWithEllipsis() {
+    UiSnapshot.Builder b = screen();
+    UiNode n = b.add("TextView", "", "я".repeat(5000), 0, 0, 0, 100, 50);
+    assertEquals(UiSnapshot.LABEL_LIMIT + 1, n.label.length());
+    assertTrue(n.label.endsWith("…"));
+  }
+
+  @Test
+  public void renderAndDiffStayUnderOutputLimitAndSayWhatWasCut() {
+    UiSnapshot.Builder b = screen();
+    for (int i = 0; i < 200; i++)
+      b.add("TextView", "id/row" + i, "x".repeat(150) + i, UiNode.CLICK, 0, i, 1080, i + 10);
+    UiSnapshot big = b.build();
+
+    String full = big.render(UiSnapshot.Mode.FULL);
+    assertTrue(full.length() <= UiSnapshot.OUTPUT_LIMIT + 120);
+    assertTrue(full.contains("more lines not shown"));
+
+    String delta = big.diff(screen().build());
+    assertTrue(delta.length() <= UiSnapshot.OUTPUT_LIMIT + 120);
+    assertTrue(delta.contains("more lines not shown"));
+  }
 }
