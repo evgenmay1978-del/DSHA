@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "runtimeId": "d0a9b03c7b471be2ff934a3c0886d8391d7261818e9898d9a5f58554a2d01156",
+  "runtimeId": "6053b2c859c26aef233cebb1c066e87b969fb44d5ebcc3123d69eafcded9bc65",
   "baseVersion": "10",
   "dshVersion": "0.2.0-rc.2",
   "launcherContract": "DSHA_ARM64_V2",
@@ -287,7 +287,7 @@
     "util/BridgeConfirmations.java": "a0e3ac5499b764f0b11575781e61800a15d3bafef1150b5e304b44ad7f20ab48",
     "util/BridgeCredentialAuth.java": "d006b8f6b5363e0a5b31bf054b32858c564c80f54d935a047afe85e1a1e56310",
     "util/BridgeCredentialFiles.java": "74b455ed0e415e93157e90662a11d8d0b7bc2020251a13cb1904a90698d922dc",
-    "util/BridgeRoutes.java": "77d50445a40e7acf4719afef6fc562f3c7ded459ef65b8666af8ed3d14f18d77",
+    "util/BridgeRoutes.java": "795f04d94bd578767307f0cbcaefcbd229b9e1de2d48184deaba8d15cff5bab1",
     "util/BuiltinPluginRegistry.java": "aa062d61c3840955a42d8a723f40a9b9fe384ceaf53cbf5fbf254482b6cb1a8d",
     "util/BundledRootfsAsset.java": "142b164efff4231ef2091ad44a92852b7b84ef7954a9d7a98a57f1f8b9b31f73",
     "util/CoalescingPoller.java": "f498844f101f989e22788daf258ee00e3385a33bcd8f3db483df485b1fd774f6",
