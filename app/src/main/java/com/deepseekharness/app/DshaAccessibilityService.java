@@ -701,6 +701,8 @@ public class DshaAccessibilityService extends AccessibilityService {
     sb.append(" screen=").append(before.screenId());
     if (before.truncated()) sb.append(" (tree truncated)");
     if (problem.equals("REF_NO_DUMP")) sb.append(" (call /app/ui/dump first)");
+    if (problem.equals("REF_AMBIGUOUS"))
+      sb.append(" (duplicate controls changed; re-read with /app/ui/dump)");
     return sb.toString();
   }
 

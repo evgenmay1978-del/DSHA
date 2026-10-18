@@ -145,9 +145,28 @@ public final class UiAct {
    */
   public static Resolved resolveRef(UiSnapshot seen, UiSnapshot now, int ref, String expect) {
     if (seen == null) return new Resolved(null, "REF_NO_DUMP");
-    UiNode before = seen.byRef(ref);
-    if (before == null) return new Resolved(null, "REF_NOT_FOUND");
-    UiNode match = now.byIdentity(before.identity());
+    UiNode target = seen.byRef(ref);
+    if (target == null) return new Resolved(null, "REF_NOT_FOUND");
+    String identity = target.identity();
+    // Lists hold many identical controls ("Delete" on every row): a ref is the nth such control,
+    // not "the first one that looks the same". Keep the ordinal across the two snapshots, and
+    // refuse to guess when the number of identical controls changed (a row was added or removed).
+    int ordinal = 0;
+    int total = 0;
+    for (UiNode node : seen.nodes()) {
+      if (!node.identity().equals(identity)) continue;
+      if (node == target) ordinal = total;
+      total++;
+    }
+    int nowTotal = 0;
+    UiNode match = null;
+    for (UiNode node : now.nodes()) {
+      if (!node.identity().equals(identity)) continue;
+      if (nowTotal == ordinal) match = node;
+      nowTotal++;
+    }
+    if (nowTotal == 0) return new Resolved(null, "REF_STALE");
+    if (nowTotal != total) return new Resolved(null, "REF_AMBIGUOUS");
     if (match == null) return new Resolved(null, "REF_STALE");
     if (!match.labelContains(expect)) return new Resolved(null, "REF_STALE");
     return new Resolved(match, null);

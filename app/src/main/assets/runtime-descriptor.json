@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "runtimeId": "9ea7c8335b4dc36ba2c26235fc57dc4539ba5d7e98bc3fb4d071eac8dbc3d00a",
+  "runtimeId": "3472c323ee68bee053c96349e2e688c9748acad4c008e988b29933ed7d42363c",
   "baseVersion": "10",
   "dshVersion": "0.2.0-rc.2",
   "launcherContract": "DSHA_ARM64_V2",
@@ -8,7 +8,7 @@
     "DeviceBridgeService.java": "c6c0e8c24289d3c2bed6a92013f92160a7337a1f0a5e04bc7aa8853ea25a1bb8",
     "DeviceFileCore.java": "fae1c8279c4805665ce0b4cb6b377f7c7cab7e9e16bc97007fadb207e0b74846",
     "DeviceShellExecutor.java": "2410e0efa3436fd8b2bf231b37f8398fb78b863326d50a3874bc9ae0ecbe94b4",
-    "DshaAccessibilityService.java": "1834a26dbad5196f8017571d814319de803ec92a9bd4a257775aeec71b30cda5",
+    "DshaAccessibilityService.java": "3288cdee1a2fcdac2ab8b608ba11c9334628baeee7d1e5c071ece5c0717cf17d",
     "DshaApp.java": "8440373b8091c49cddcc2fae8f9bcec77274dcb68d6e3a836dd2b1c00fc7c97e",
     "HarnessService.java": "043e418e694d776430f6178bf99caa8b92d9fb4ef01d71e7e99b4c5c54bba4ec",
     "HttpShellService.java": "08529aa45cf6c92b3d9ee0a1ca232bb1b9afc89e51fd97174f2035682287b3e1",

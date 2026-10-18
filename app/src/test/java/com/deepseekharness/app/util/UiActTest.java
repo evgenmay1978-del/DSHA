@@ -105,6 +105,31 @@ public class UiActTest {
   }
 
   @Test
+  public void duplicateControlsResolveByOrdinalOnAnUnchangedScreen() {
+    UiSnapshot seen = snapshotOf("A", "Удалить", "B", "Удалить", "C", "Удалить");
+    UiAct.Resolved resolved = UiAct.resolveRef(seen, seen, 4, "");
+    assertNull(resolved.problem);
+    assertEquals(4, resolved.node.ref);
+  }
+
+  @Test
+  public void duplicateControlsKeepTheirOrdinalUnderABanner() {
+    UiSnapshot seen = snapshotOf("A", "Удалить", "B", "Удалить");
+    UiSnapshot now = snapshotOf("Баннер", "A", "Удалить", "B", "Удалить");
+    UiAct.Resolved resolved = UiAct.resolveRef(seen, now, 4, "");
+    assertNull(resolved.problem);
+    assertEquals("Удалить", resolved.node.label);
+    assertEquals(5, resolved.node.ref);
+  }
+
+  @Test
+  public void aNewIdenticalRowIsAmbiguousRatherThanGuessed() {
+    UiSnapshot seen = snapshotOf("A", "Удалить", "B", "Удалить");
+    UiSnapshot now = snapshotOf("Удалить", "A", "Удалить", "B", "Удалить");
+    assertEquals("REF_AMBIGUOUS", UiAct.resolveRef(seen, now, 4, "").problem);
+  }
+
+  @Test
   public void fractionsMapInsideTheScreenAndClamp() {
     assertEquals(500, UiAct.pixel(0.5, 1000));
     assertEquals(0, UiAct.pixel(0.0, 1000));
