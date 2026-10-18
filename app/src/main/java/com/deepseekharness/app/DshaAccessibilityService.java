@@ -915,6 +915,37 @@ public class DshaAccessibilityService extends AccessibilityService {
         com.deepseekharness.app.util.UiText.format("滑动 (%d,%d)→(%d,%d)", x1, y1, x2, y2));
   }
 
+  /**
+   * 组合手势：长按、双击、拖拽、捏合。几何在 {@link com.deepseekharness.app.util.UiGesture} 里算好并有宿主单测，
+   * 这里只把每根手指的折线翻译成 Path 再交给系统；等待时间按手势本身的时长算，别用固定 6 秒。
+   */
+  public static String uiGesture(com.deepseekharness.app.util.UiGesture.Spec spec, String what) {
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.N) {
+      return "手势需 Android 7+（当前系统过旧）";
+    }
+    DshaAccessibilityService s = instance;
+    if (s == null) return com.deepseekharness.app.util.UiText.text(NOT_READY);
+    if (spec == null || spec.strokes().isEmpty()) {
+      return com.deepseekharness.app.util.UiText.text("[ERR] 手势为空");
+    }
+    int maxStrokes = android.accessibilityservice.GestureDescription.getMaxStrokeCount();
+    if (spec.strokes().size() > maxStrokes) {
+      return com.deepseekharness.app.util.UiText.format(
+          "[ERR] 系统最多支持 %d 个同时触点，本次要 %d 个", maxStrokes, spec.strokes().size());
+    }
+    android.accessibilityservice.GestureDescription.Builder b =
+        new android.accessibilityservice.GestureDescription.Builder();
+    for (com.deepseekharness.app.util.UiGesture.Stroke stroke : spec.strokes()) {
+      android.graphics.Path path = new android.graphics.Path();
+      path.moveTo(stroke.x(0), stroke.y(0));
+      for (int i = 1; i < stroke.pointCount(); i++) path.lineTo(stroke.x(i), stroke.y(i));
+      b.addStroke(
+          new android.accessibilityservice.GestureDescription.StrokeDescription(
+              path, stroke.startMs(), stroke.durationMs()));
+    }
+    return s.gesture(b.build(), what, spec.totalMs() + 3000);
+  }
+
   @androidx.annotation.RequiresApi(24)
   private static android.accessibilityservice.GestureDescription buildTap(int x, int y) {
     android.graphics.Path p = new android.graphics.Path();
@@ -927,6 +958,13 @@ public class DshaAccessibilityService extends AccessibilityService {
   /** 派发手势并等结果：dispatchGesture 是异步回调，agent 那边要的是同步答复 */
   @androidx.annotation.RequiresApi(24)
   private String gesture(android.accessibilityservice.GestureDescription gd, String what) {
+    return gesture(gd, what, 6000);
+  }
+
+  /** 同一个派发，但等待上限由调用方给：三秒长按不该按六秒超时算，也不该等到固定 6 秒。 */
+  @androidx.annotation.RequiresApi(24)
+  private String gesture(
+      android.accessibilityservice.GestureDescription gd, String what, int timeoutMs) {
     final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
     final boolean[] ok = {false};
     try {
@@ -948,7 +986,7 @@ public class DshaAccessibilityService extends AccessibilityService {
               },
               null);
       if (!accepted) return com.deepseekharness.app.util.UiText.format("[ERR] 手势未被接受（%s）", what);
-      if (!latch.await(6, java.util.concurrent.TimeUnit.SECONDS)) {
+      if (!latch.await(Math.max(1000, timeoutMs), java.util.concurrent.TimeUnit.MILLISECONDS)) {
         return com.deepseekharness.app.util.UiText.format("[ERR] 手势超时（%s）", what);
       }
       return ok[0]

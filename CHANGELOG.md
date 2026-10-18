@@ -8,6 +8,11 @@
 - 运行时描述符 `launcherInputs` 随两份启动器源码更新，`runtimeId` 随之变化（资产 `inputs` 与原生库摘要不变）；装新包时由既有受管运行时更新流程处理，该路径尚未在设备上验证。
 - 虚拟屏 `virtualDump` 复用同一快照模型与遍历预算；屏幕旋转改经 DisplayManager 读取（服务 Context 在 Android 11+ 上调用 `getDisplay()` 会抛异常）。
 - 纯逻辑模型 `UiNode` / `UiSnapshot` 不依赖 Android，宿主 JUnit 覆盖 ref 稳定性、指纹对像素抖动不敏感与差异分类。
+### `/app/ui/gesture`
+- 新增 `/app/ui/gesture?kind=longpress|doubletap|drag|pinch`：长按、双击、拖拽、双指捏合各用一次调用完成，不必拿 `swipe` 拼；捏合的放大/缩小由 `start`/`end` 两个半径表达。
+- 几何在 `UiGesture`（不依赖 Android，宿主 JUnit 覆盖端点与插值）里算好，服务只把每根手指的折线翻成 `Path` 派发；负坐标、零半径、超过系统同屏触点上限时直接回 `[ERR]`，不派发。
+- 手势的等待上限按手势自身时长计算（此前固定等 6 秒，超过 6 秒的长按会被误报为超时）。
+
 - 修复格式清单漏登：`BoundedGuestBootRecovery` 及其测试由 `[skip ci]` 同步提交引入但未进入 `java-format-files.json`，导致 `format-java-tree --check` 在 main 上失败；两文件本身已符合格式，未改代码。
 
 ## 0.2.0-rc2.1 · build172（2026-10-14，本地软件交付）
