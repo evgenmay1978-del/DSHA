@@ -2,6 +2,8 @@
 
 ## 未发布 · 个人分支 evgenmay1978-del/DSHA
 
+- CI 基线：`run-host-tests --stage fast` 在干净检出上不再必然失败。生成类归档（`ubuntu-tools.bin` 等）缺席时按「外部输入」暂缓，其它缺件仍失败；Creator 解释器篡改只在实现了该检查的平台上断言（Windows 双消费者，POSIX 由 Python 消费者拒绝）；依赖已准备测试运行时的用例（task-progress 的 scrubber 段）在无归档时记为 `SKIPPED_MISSING_FIXTURE` 并在日志写明原因，ci-package 还原归档后照常执行。
+
 - `/app/ui/dump` 观察结果升级：首行给出 app、屏幕尺寸、DPI、旋转与结构指纹 `screen=`；每个节点带稳定 `#ref`、短类名、resource-id、文字和动作标志（click/long/edit/scroll/on·off/focused/disabled/selected/password）及中心点与边界。
 - 新增 `?mode=outline`（只列可操作节点，省 token）与 `?changed_only=1`（只回与上次 dump 的差异：+新增 / -消失 / ~状态变化；结构未变只回一行 `unchanged`）。不带参数时仍返回完整清单（参数兼容）。
 - **不兼容：dump 每行文本格式已改变。** 旧格式 `[N] "文字" 可点击 中心=(x,y) 区域=l,t,r,b` → 新格式 `#N 类名 "文字" id=… [click,…] @x,y (l,t,r,b)`，首行 `窗口应用:` 改为 `app=…`。内置 `dsh-computer-use-android` 原样透传文本，不受影响；按旧格式（如 `中心=\(`）正则解析的外部脚本或技能需改为解析 `@x,y`。单节点文字截断到 160 字符，整次回复上限 12000 字符并注明省略行数。

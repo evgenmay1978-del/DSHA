@@ -192,7 +192,17 @@ class RuntimeSessionTest(unittest.TestCase):
             data = json.loads(original)
             data['metadataRuntime'][field] = value
             self.session.path.write_text(json.dumps(data), encoding='utf-8')
-            self.rejected('SESSION_METADATA_RUNTIME_CHANGED')
+            # The Node consumer re-derives the creator interpreter only on Windows (libuv
+            # reports 32-bit volume IDs, so the Windows path spawns the Python worker for the
+            # full-precision proof). On POSIX the Python creator is the consumer that must
+            # reject a tampered interpreter; asserting a Node rejection here would test a
+            # check that this platform does not implement.
+            node, python = self.children()
+            self.assertNotEqual(0, python.returncode)
+            self.assertIn('SESSION_METADATA_RUNTIME_CHANGED', python.stderr)
+            if os.name == 'nt':
+                self.assertNotEqual(0, node.returncode)
+                self.assertIn('SESSION_METADATA_RUNTIME_CHANGED', node.stderr)
         self.session.path.write_bytes(original)
 
     @unittest.skipUnless(os.name == 'nt', 'Windows full-precision worker contract')

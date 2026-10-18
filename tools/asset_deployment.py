@@ -24,11 +24,20 @@ def load_manifest(path=MANIFEST):
         logical(row['source'])
         for name in row.get('assets',[]):logical(name)
     return data
-def selected_assets(source,manifest):
+ARCHIVE_SUFFIXES=('.bin','.tar.gz')
+
+def external_archives(manifest):
+    """Large build inputs (rootfs/runtime archives) that CI restores instead of committing."""
+    return {name for name in manifest['packagedFiles'] if name.endswith(ARCHIVE_SUFFIXES)}
+
+def selected_assets(source,manifest,deferred=frozenset()):
     source=Path(source).resolve();selected=[]
+    deferred=set(deferred)&external_archives(manifest)
     for name in manifest['packagedFiles']:
         path=source/name
-        if not path.is_file() or path.is_symlink():raise ValueError('ASSET_DEPLOYMENT_MISSING:'+name)
+        if not path.is_file() or path.is_symlink():
+            if name in deferred:continue
+            raise ValueError('ASSET_DEPLOYMENT_MISSING:'+name)
     for name in manifest['packagedTrees']:
         if not (source/name).is_dir() or (source/name).is_symlink():raise ValueError('ASSET_DEPLOYMENT_TREE:'+name)
     for path in source.rglob('*'):
@@ -41,10 +50,11 @@ def selected_assets(source,manifest):
         if name in manifest['packagedFiles'] or any(name.startswith(tree+'/') for tree in manifest['packagedTrees']):selected.append((path,Path(name)));continue
         raise ValueError('ASSET_DEPLOYMENT_UNREGISTERED:'+name)
     return sorted(selected,key=lambda row:row[1].as_posix())
-def verify_reader_contracts(source,manifest,repository=ROOT):
+def verify_reader_contracts(source,manifest,repository=ROOT,deferred=frozenset()):
     source=Path(source);repository=Path(repository)
-    selected={relative.as_posix() for _,relative in selected_assets(source,manifest)}
-    deployed=selected|set(manifest['generatedFiles'])|set(manifest['externalGeneratedFiles'])
+    deferred=set(deferred)&external_archives(manifest)
+    selected={relative.as_posix() for _,relative in selected_assets(source,manifest,deferred)}
+    deployed=selected|set(manifest['generatedFiles'])|set(manifest['externalGeneratedFiles'])|deferred
     def require(name,reader):
         name=logical(name)
         if name not in deployed:raise ValueError('ASSET_READER_UNDEPLOYED:'+reader+':'+name)

@@ -2,7 +2,7 @@
 """Real isolated asset selections/contract traversal; no APK or user files."""
 import hashlib,json,tempfile,unittest
 from pathlib import Path
-from asset_deployment import selected_assets,verify_reader_contracts,load_manifest,ROOT
+from asset_deployment import selected_assets,verify_reader_contracts,load_manifest,external_archives,ROOT
 
 class Deployment(unittest.TestCase):
     def setUp(self):
@@ -52,8 +52,13 @@ class Deployment(unittest.TestCase):
         file=self.repo/'manifest.json';bad=dict(self.manifest);bad['sourceTransforms']={'original.tgz':'undeclared.bin'};file.write_text(json.dumps(bad))
         with self.assertRaisesRegex(ValueError,'TRANSFORM'):load_manifest(file)
     def test_current_project_deployment_and_retirement_boundary(self):
-        manifest=load_manifest();verify_reader_contracts(ROOT/'app/src/main/assets',manifest)
-        selected={p.as_posix() for _,p in selected_assets(ROOT/'app/src/main/assets',manifest)}
+        manifest=load_manifest();assets=ROOT/'app/src/main/assets'
+        # 生成类归档（rootfs/runtime/tools）不提交，由 CI 按固定 URL+SHA-256 还原；
+        # 缺席时只跳过这几个已声明的归档，其它缺件仍然失败。
+        deferred={name for name in external_archives(manifest) if not (assets/name).is_file()}
+        if deferred:print('DEFERRED_EXTERNAL_ARCHIVES',sorted(deferred))
+        verify_reader_contracts(assets,manifest,deferred=deferred)
+        selected={p.as_posix() for _,p in selected_assets(assets,manifest,deferred)}
         for name in ['selftest.py','rootfs-confirm-install.sh','pnpm-env-fix.sh','backup-prepare.py','restore-merge.py','startup-checkpoints.py','startup-recovery.py','dsh-deps-heal.sh','fix-stale-bundles.sh','flatten-l2s.py','fs-write-patch.sh','heal-pnpm-shells.py','heal-profile-boot.py','heal-session.sh','heal-sessions.py','migrate-public-data.sh','webserver-auth-patch.sh','webui-degrade-patch.sh','webui-origin-port-patch.sh','webui-polyfill.sh','environment-data.py']:
             self.assertNotIn(name,selected)
             self.assertFalse((ROOT/'app/src/main/assets'/name).exists())

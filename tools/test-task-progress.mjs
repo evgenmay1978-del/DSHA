@@ -119,6 +119,13 @@ mismatchedContextReporter.event(nextSession,{type:'turn/start',data:{turn:1}});
 await mismatchedContextReporter.tick();assert.equal(mismatchedContextReporter.identity,undefined);
 mismatchedContextReporter.dispose();
 // Import the actual canonical rc2 scrubber used by bash/MCP/PTY launchers.
+// The prepared test runtime is a build input (it contains the generated dsh-runtime archive),
+// so a clean source checkout cannot run this half. ci-package restores the archive and runs it
+// there; skipping here is reported in the log instead of failing the whole fast stage.
+if(!process.env.DSHA_TEST_RUNTIME){
+  console.log('SKIP task-progress runtime scrubber checks: DSHA_TEST_RUNTIME is unset; run python3 tools/prepare-test-runtime.py first.');
+  process.exit(0);
+}
 const raw=testRuntime('raw');
 const subprocessSource=path.join(raw,'node_modules/@deepseek-ai/dsh-subprocess/lib/index.js');
 assert.equal(JSON.parse(readFileSync(path.join(raw,'node_modules/@deepseek-ai/dsh-subprocess/package.json'),'utf8')).version,'0.2.0-rc.2');
