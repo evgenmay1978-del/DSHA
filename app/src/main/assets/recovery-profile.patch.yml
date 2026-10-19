@@ -58,6 +58,16 @@
   disabled: true
 - id: session-telemetry-otel
   disabled: true
+# DSH 0.2.1 additions: a host tool, the scheduler and maintainer context stay out of the
+# emergency profile (working-directory and remote-access are services the gateway needs).
+- id: tool-working-directory
+  disabled: true
+- id: schedule
+  disabled: true
+- id: ui-schedule
+  disabled: true
+- id: harness-dev-context
+  disabled: true
 - insert:
     - id: dsha-recovery-agent
       name: '@PLUGIN_ROOT@/recovery-agent.js'

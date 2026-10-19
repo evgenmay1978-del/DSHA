@@ -22,7 +22,9 @@ from release_layout import checked_path, source_snapshot_path
 from source_snapshot import snapshot as complete_source_snapshot, public_source_path
 
 ROOT=Path(__file__).resolve().parents[1]
-CERT=json.loads((ROOT/'ci/release-identity.json').read_text(encoding='utf-8'))['certificateSha256']
+IDENTITY=json.loads((ROOT/'ci/release-identity.json').read_text(encoding='utf-8'))
+CERT=IDENTITY['certificateSha256']
+PACKAGE=IDENTITY['packageName']
 PNPM_VERSION=json.loads((ROOT/'tools/runtime-tools.lock.json').read_text(encoding='utf-8'))['pnpm']['version']
 
 def digest(path):
@@ -55,10 +57,10 @@ def validate_device_evidence(proof, apks, root=ROOT):
     variants={item['flavor']:item for item in apks}
     if len(apks)!=2 or set(variants)!={'standard','low'}:
         raise ValueError('DEVICE_EVIDENCE_FLAVORS')
-    if any(item.get('package')!='com.dsh.client' or item.get('certificateSha256')!=CERT
+    if any(item.get('package')!=PACKAGE or item.get('certificateSha256')!=CERT
            or item.get('debuggable') is not False or type(item.get('versionCode')) is not int for item in apks):
         raise ValueError('DEVICE_EVIDENCE_CANDIDATE_IDENTITY')
-    if proof.get('schema')!=2 or proof.get('package')!='com.dsh.client' or proof.get('certificateSha256')!=CERT \
+    if proof.get('schema')!=2 or proof.get('package')!=PACKAGE or proof.get('certificateSha256')!=CERT \
             or proof.get('versionCode')!=variants['standard']['versionCode'] \
             or proof.get('versionCode')!=variants['low']['versionCode'] \
             or not isinstance(proof.get('serial'),str) or not proof['serial'].strip() \
@@ -84,7 +86,7 @@ def validate_device_evidence(proof, apks, root=ROOT):
         if install.get('uninstalled') is not False:
             raise ValueError('DEVICE_EVIDENCE_OVERLAY_REQUIRED:'+flavor)
         for identity in (before,after):
-            if not isinstance(identity,dict) or identity.get('package')!='com.dsh.client' or identity.get('certificateSha256')!=CERT \
+            if not isinstance(identity,dict) or identity.get('package')!=PACKAGE or identity.get('certificateSha256')!=CERT \
                     or identity.get('debuggable') is not False or type(identity.get('uid')) is not int \
                     or identity['uid']<=0 or not isinstance(identity.get('firstInstallTime'),str) \
                     or not identity['firstInstallTime'].strip() or type(identity.get('versionCode')) is not int \
@@ -204,7 +206,7 @@ def deliver_from_receipt(path,evidence,baseline):
     publish_apks(report['apks'])
     report['status']='PASS_FOR_EXECUTED_SCOPE'
     report['softwareReceipt']={'path':str(path.resolve()),'sha256':digest(path)}
-    report['device']={'status':'MATCHED_EXTERNAL_EVIDENCE','package':'com.dsh.client',
+    report['device']={'status':'MATCHED_EXTERNAL_EVIDENCE','package':PACKAGE,
                       'evidence':str(evidence.resolve()),'sha256':proof_sha256}
     report['deliveredAt']=datetime.datetime.now(datetime.timezone.utc).isoformat()
     destination=store_delivery_receipt(report)
@@ -220,7 +222,7 @@ def validate_local_software_delivery(report,current):
         raise ValueError('LOCAL_SOFTWARE_DELIVERY_SCOPE')
     apks=report.get('apks',[])
     if len(apks)!=2 or {a.get('flavor') for a in apks}!={'standard','low'} \
-            or any(a.get('package')!='com.dsh.client' or a.get('certificateSha256')!=CERT
+            or any(a.get('package')!=PACKAGE or a.get('certificateSha256')!=CERT
                    or a.get('debuggable') is not False for a in apks) \
             or len({a.get('versionCode') for a in apks})!=1:
         raise ValueError('LOCAL_SOFTWARE_DELIVERY_IDENTITY')
@@ -344,7 +346,7 @@ def deliver_local_from_receipt(path,host_receipts,soak,software=None,device=None
     if report.get('device',{}).get('status')=='MATCHED_EXTERNAL_EVIDENCE':
         raise ValueError('LOCAL_SOFTWARE_DELIVERY_DEVICE_SCOPE')
     current=source_snapshot();validate_software_receipt(report,current)
-    report['device']={'status':'NOT_RUN_BY_USER_REQUEST','package':'com.dsh.client'}
+    report['device']={'status':'NOT_RUN_BY_USER_REQUEST','package':PACKAGE}
     validate_local_software_delivery(report,current)
     report['hostTests']=validate_host_evidence(host_receipts,current)
     report['browserSoak']=validate_browser_soak(soak)
@@ -415,7 +417,7 @@ def main():
     report={'schema':1,'verificationSchema':2,'stage':args.stage,'startedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'status':'RUNNING','commands':[],
         'commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
         'dirty':bool(subprocess.check_output(['git','status','--porcelain'],cwd=ROOT)),
-        'device':{'status':'NOT_RUN_BY_USER_REQUEST' if local_mode else 'EXTERNAL_EVIDENCE_REQUIRED','package':'com.dsh.client'},
+        'device':{'status':'NOT_RUN_BY_USER_REQUEST' if local_mode else 'EXTERNAL_EVIDENCE_REQUIRED','package':PACKAGE},
         'notVerified':['Android 6/7 physical devices','minimum standard API 30 physical device','reported Android 16 tablet','physical 16 KiB kernel','power loss durability',
                        'bxroot on Android SELinux/seccomp and physical old-kernel fallback',
                        'Physical cold installation, PTY guest lifetime and runtime performance'],
@@ -535,7 +537,7 @@ def main():
                     if f'Verified using {scheme} scheme' not in signature or not re.search(r'Verified using '+scheme+r' scheme[^\n]+true',signature):raise RuntimeError('APK lacks verified '+scheme+' signing')
             badging=run(flavor+'-manifest',[build_tools/('aapt.exe' if os.name=='nt' else 'aapt'),'dump','badging',apk])
             package=re.search(r"package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'",badging)
-            if not package or package[1]!='com.dsh.client' or int(package[2])!=version_code \
+            if not package or package[1]!=PACKAGE or int(package[2])!=version_code \
                     or package[3]!=version_name+('low' if flavor=='low' else '') \
                     or 'application-debuggable' in badging or f"sdkVersion:'{minimum}'" not in badging \
                     or "targetSdkVersion:'37'" not in badging \
@@ -579,7 +581,7 @@ def main():
             validate_acceptance(proof,acceptance)
             if digest(args.device_evidence)!=proof_sha256:raise ValueError('DEVICE_EVIDENCE_PROOF_CHANGED')
             if source_snapshot()!=final_source:raise ValueError('DELIVERY_SOURCE_CHANGED')
-            report['device']={'status':'MATCHED_EXTERNAL_EVIDENCE','package':'com.dsh.client',
+            report['device']={'status':'MATCHED_EXTERNAL_EVIDENCE','package':PACKAGE,
                               'evidence':str(args.device_evidence.resolve()),'sha256':proof_sha256}
             publish_apks(report['apks'])
         report['status']='PASS_UNSIGNED_PACKAGE' if args.stage=='package' else 'PASS_FOR_EXECUTED_SCOPE' if args.deliver else 'PASS_WITH_EXPLICIT_DEVICE_GAPS'

@@ -83,14 +83,20 @@ try{
   try{
     // 没有模型凭据也必须能关闭配置提示并编辑草稿，不把下载到 HTML 当作浏览器可用。
     const dismiss=page.getByRole('button',{name:/^(稍后配置|Configure later|Later|Skip for now|继续|Continue)$/i});
+    // DSH 0.2.1 replaced the "configure later" prompt with a "Get started" dialog whose only
+    // way out without credentials is its close button.
+    const closeDialog=page.getByRole('dialog').getByRole('button',{name:/^(关闭|Close)$/i});
     for(let attempt=0;attempt<30;attempt++){
-      const visible=await dismiss.all();for(const button of visible)if(await button.isVisible())await button.click();
+      const visible=[...await dismiss.all(),...await closeDialog.all()];for(const button of visible)if(await button.isVisible())await button.click();
       if(await page.locator('[contenteditable="true"]:visible,textarea:visible').count())break;
       await page.waitForTimeout(200);
     }
     const composer=page.locator('[contenteditable="true"]:visible,textarea:visible').first();
     const later=page.getByRole('button',{name:/^(稍后配置|Configure later|Later|Skip for now)$/i});
     await later.waitFor({state:'visible',timeout:8000}).catch(()=>{});if(await later.isVisible())await later.click();
+    // The 0.2.1 dialog can open after the composer is already visible behind it.
+    await closeDialog.first().waitFor({state:'visible',timeout:3000}).catch(()=>{});
+    for(const button of await closeDialog.all())if(await button.isVisible())await button.click();
     await page.getByText('DSHA Recovery',{exact:true}).first().waitFor({state:'visible'});
     assert.equal(await page.getByText('选择一个工作区开始',{exact:true}).count(),0,'empty workspace screen cannot pass');
     await composer.waitFor({state:'visible'});await composer.click();

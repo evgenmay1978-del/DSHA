@@ -2,6 +2,12 @@
 
 ## 未发布 · 个人分支 evgenmay1978-del/DSHA
 
+### 分支自建包（独立应用、自有签名）
+- 上游发布证书 `e7e3a31a…` 不在本分支手中，无法覆盖安装旧应用；本分支改为独立应用 `com.dsh.client.fork`，与旧应用并存，数据经内置可移植备份导出/导入迁移。两者监听相同的本机端口（3090/3080），同一时间只运行一个。
+- 发布身份唯一来源 `ci/release-identity.json`：签名、发布清单、稳定性与验收工具改为读取其中的包名与证书；`tools/set-release-identity.py` 用自有 keystore 写入证书摘要（keystore 不进仓库）。
+- 基础 rootfs：构建输入改用已优化的 `offline-rootfs.bin`（`b9fe8a04…`，与应急 rootfs 同一锁定值）。`prepare-standard-assets` 的过滤对它幂等（逐字节复现），原始未优化归档不再必需。`tools/import-apk-assets.py` 从已发布 APK 取回 rootfs 与 `ubuntu-tools.bin`，按描述符、应急锁与工具锁逐项核对，并按原格式写出 `ubuntu-tools.inputs.json`。
+- 应急运行时随核心升到 DSH 0.2.1-rc.2（归档与正式运行时相同，APK 恢复单份存储）；应急 Profile 关闭 0.2.1 新增的宿主工具 `tool-working-directory`、计划任务与开发者上下文。
+
 ### DSH 0.2.1-rc.2
 - 内置 `@deepseek-ai/dsh` 由 0.2.0-rc.2 升级到 **0.2.1-rc.2**（126 个官方包同步；`dsh-invariants`、`dsh-subagent-in-process-driver` 上游已不再发布，从锁文件移除；`cordis-plugin-group` 按上游 peer 固定 1.0.5）。
 - 锁文件用 `overrides` 把 `zod` 固定为 4.4.3：0.2.1 各包精确要求 4.4.3，不固定时 npm 会把最新 zod 提升到顶层并在 56 个包里各放一份私有副本（解压体积 +约 250 MB）。
