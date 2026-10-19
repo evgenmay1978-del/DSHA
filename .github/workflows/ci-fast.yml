@@ -47,17 +47,7 @@ jobs:
         run: |
           platform=$(python3 tools/ci-toolchain.py --field androidPlatform)
           buildtools=$(python3 tools/ci-toolchain.py --field buildTools)
-          # Runner images do not reliably put sdkmanager on PATH; prefer the SDK's own cmdline-tools
-          # and fail with a readable annotation (the job log is not always available) instead of 127.
-          sdk="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          manager="$sdk/cmdline-tools/latest/bin/sdkmanager"
-          [ -x "$manager" ] || manager="$(command -v sdkmanager || true)"
-          if [ -z "$manager" ]; then
-            echo "::error title=sdkmanager not found::ANDROID_HOME=$sdk; cmdline-tools: $(ls "$sdk/cmdline-tools" 2>&1 | tr '\n' ' ')"
-            exit 1
-          fi
-          echo "::notice title=sdkmanager::$manager"
-          "$manager" "platforms;$platform" "build-tools;$buildtools"
+          bash tools/ci-sdkmanager.sh "platforms;$platform" "build-tools;$buildtools"
           chmod +x gradlew
           # preBuild gates the build on generated offline inputs: bxroot natives (verifyBxrootNative /
           # verifyBxrootProjection rebuild them from lock and compare bytes) and the runtime descriptor

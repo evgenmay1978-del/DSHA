@@ -46,7 +46,9 @@ jobs:
         id: package
         run: python3 tools/verify-ci-package.py --run "$RUNNER_TEMP/package-run.json" --artifacts "$RUNNER_TEMP/verified-package"
       - name: Android signing tools
-        run: sdkmanager "build-tools;${{ steps.toolchain.outputs.buildTools }}"
+        env:
+          BUILD_TOOLS: ${{ steps.toolchain.outputs.buildTools }}
+        run: bash tools/ci-sdkmanager.sh "build-tools;$BUILD_TOOLS"
       - name: Historical certificate and all three signing schemes
         env:
           KEY_BASE64: ${{ secrets.DSHA_PUBLISH_KEYSTORE_BASE64 }}
@@ -72,5 +74,5 @@ jobs:
         run: |
           version=$(python3 -c 'import re,pathlib; print(re.search(r"versionName\s+\"([^\"]+)\"",pathlib.Path("app/build.gradle").read_text())[1])')
           git archive --format=zip HEAD > "$RUNNER_TEMP/signed-release/DSHA-source.zip"
-          printf 'Source commit: %s\n\nSuccessful unsigned software/package receipt and E7E3 v1/v2/v3 signature verified. Physical device acceptance is separate; do not infer a device matrix from this workflow.\n' "$GITHUB_SHA" > "$RUNNER_TEMP/release-notes.md"
+          printf 'Source commit: %s\n\nSuccessful unsigned software/package receipt and v1/v2/v3 signature with the ci/release-identity.json certificate verified. Physical device acceptance is separate; do not infer a device matrix from this workflow.\n' "$GITHUB_SHA" > "$RUNNER_TEMP/release-notes.md"
           gh release create "v$version" "$RUNNER_TEMP/signed-release/"* --draft --target "$GITHUB_SHA" --title "DSHA $version" --notes-file "$RUNNER_TEMP/release-notes.md"
