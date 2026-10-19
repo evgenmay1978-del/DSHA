@@ -2122,6 +2122,17 @@
       "environment": {},
       "timeoutSeconds": 300,
       "args": []
+    },
+    {
+      "path": "tools/test-ci-assets.py",
+      "stage": "fast",
+      "reason": "CI input bundle names: each archive has a runtime-descriptor digest and no git-tracked file is bundled; reads repository metadata only",
+      "requires": [
+        "python39"
+      ],
+      "environment": {},
+      "timeoutSeconds": 120,
+      "args": []
     }
   ],
   "historicalExcluded": [

@@ -10,9 +10,12 @@ import urllib.request
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+# Only generated inputs that git does not carry. pnpm-runtime.bin, python-support.bin,
+# glibc-python.tar.gz and adb-wheels.tar.gz are committed, so the checkout already has their
+# exact bytes; bundling them would only let a bundle overwrite tracked files (and the latter
+# two are not runtime-descriptor inputs, so verify_sources() could never accept them).
 NAMES = ["offline-rootfs.bin", "dsh-runtime.bin", "dsh-runtime.inputs.json",
-         "ubuntu-tools.bin", "ubuntu-tools.inputs.json", "pnpm-runtime.bin",
-         "python-support.bin", "glibc-python.tar.gz", "adb-wheels.tar.gz"]
+         "ubuntu-tools.bin", "ubuntu-tools.inputs.json"]
 
 
 def bounded(name):
