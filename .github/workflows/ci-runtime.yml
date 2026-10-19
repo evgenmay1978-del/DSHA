@@ -1,0 +1,87 @@
+name: Runtime checks
+# Host tests against a real DSH tree: builds dsh-runtime.bin from the lock, prepares the
+# raw/managed fixtures with every runtime patch applied, a pinned emergency-runtime install,
+# Chromium and the React reference, then runs `run-host-tests --stage runtime`.
+# Tests whose host requirement a GitHub runner cannot provide (Android toolchain root with
+# Robolectric caches, generated recovery archives) are reported as UNAVAILABLE, not hidden.
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: runtime-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Verify toolchain against source configuration
+        id: toolchain
+        run: python3 tools/ci-toolchain.py --github-output
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: ${{ steps.toolchain.outputs.java }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ steps.toolchain.outputs.node }}
+      - name: Build dsh-runtime.bin from the lock
+        run: python3 tools/prepare-dsh-runtime.py
+      - name: Check every runtime patch anchor on the locked tree
+        run: python3 tools/scan-runtime-patches.py app/build/locked-dsh-runtime/node_modules
+      - name: Prepare raw and managed test runtimes
+        run: python3 tools/prepare-test-runtime.py
+      - name: Install the emergency runtime version for recovery tests
+        run: |
+          mkdir -p "$RUNNER_TEMP/recovery"
+          cp tools/recovery-runtime/test-install/package.json tools/recovery-runtime/test-install/package-lock.json "$RUNNER_TEMP/recovery/"
+          npm ci --prefix "$RUNNER_TEMP/recovery" --ignore-scripts --no-audit --no-fund --loglevel=error
+      - name: Stage locked backup-engine JARs
+        run: python3 tools/prepare-backup-dependencies.py
+      - name: Browser, React reference and pnpm CLI
+        run: |
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/pw-browsers"
+          npm install --prefix "$RUNNER_TEMP/pw" playwright@1.56.1 --no-audit --no-fund --loglevel=error
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+          python3 tools/prepare-browser-react-reference.py
+          pnpm=$(python3 -c "import json;print(json.load(open('tools/runtime-tools.lock.json'))['pnpm']['version'])")
+          mkdir -p "$RUNNER_TEMP/pnpm" && cd "$RUNNER_TEMP/pnpm" && npm pack "pnpm@$pnpm" --silent && tar xzf "pnpm-$pnpm.tgz"
+      - name: Runtime host tests
+        run: |
+          raw=$(python3 -c "import json;print(json.load(open('app/build/test-runtimes/current.json'))['raw'])")
+          managed=$(python3 -c "import json;print(json.load(open('app/build/test-runtimes/current.json'))['managed'])")
+          status=0
+          python3 tools/run-host-tests.py --stage runtime --unavailable-ok \
+            --raw "$raw" --managed "$managed" --recovery-raw "$RUNNER_TEMP/recovery" \
+            --playwright "$RUNNER_TEMP/pw/node_modules/playwright" --browsers-path "$RUNNER_TEMP/pw-browsers" \
+            --jdk "$JAVA_HOME" --pnpm-cli "$RUNNER_TEMP/pnpm/package/bin/pnpm.cjs" || status=$?
+          # Annotations survive when the job log is not readable; one per failing test with its last log lines.
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('app/build/host-tests/manifest.json').read_text(encoding='utf-8'))
+          clean = lambda text: text.replace('%', '%25').replace('\r', '').replace('\n', '%0A')
+          for row in report['tests']:
+              if row['status'] in ('PASS', 'UNAVAILABLE'):
+                  continue
+              log = Path(row.get('log', ''))
+              tail = log.read_text(encoding='utf-8', errors='replace').splitlines()[-12:] if log.is_file() else []
+              print('::error title=' + row['path'] + ' ' + row['status'] + '::' + clean((row.get('error', '') + '\n' + '\n'.join(tail)).strip()[:1500]))
+          for row in report.get('unavailable', []):
+              print('::notice title=unavailable on runner: ' + row['path'] + '::' + clean(row['error'][:300]))
+          passed = sum(row['status'] == 'PASS' for row in report['tests'])
+          print('::notice title=Runtime host tests::' + f"{passed} passed, {len(report.get('unavailable', []))} unavailable, failures: {report['failures']}")
+          PY
+          exit $status
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always() && (hashFiles('app/build/host-tests/**') != '')
+        with:
+          name: runtime-regressions
+          path: app/build/host-tests
+          if-no-files-found: error
+          retention-days: 14

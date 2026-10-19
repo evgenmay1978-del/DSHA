@@ -2099,6 +2099,29 @@
         "--verify-archive"
       ],
       "cli": "--verify-archive; current source/marker/lock bytes and production builder through DSHA_PYTHON; no APK/archive generation or fixture-pointer mutation"
+    },
+    {
+      "path": "tools/test-dsh-version-sites.py",
+      "stage": "fast",
+      "reason": "Every copy of the bundled DSH version (Java constant, Gradle name, migration helper, plugin peers, recipes, generated proofs) matches tools/dsh-runtime/package.json; setter rewrites copies in a temp tree only",
+      "requires": [
+        "python39"
+      ],
+      "environment": {},
+      "timeoutSeconds": 120,
+      "args": []
+    },
+    {
+      "path": "tools/test-runtime-patch-anchors.py",
+      "stage": "runtime",
+      "reason": "Every runtime patch recipe applied in memory to the locked raw DSH tree (anchor found exactly once, in order); read-only, no fixture mutation",
+      "requires": [
+        "python39",
+        "raw"
+      ],
+      "environment": {},
+      "timeoutSeconds": 300,
+      "args": []
     }
   ],
   "historicalExcluded": [

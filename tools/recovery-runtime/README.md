@@ -7,3 +7,9 @@
 `prepare-recovery-assets.py` 在生成目录写入独立描述及逐文件证明；它不会改动正式运行时描述，也不会将主运行时的版本号推导为应急版本。
 
 应急与正式归档的 SHA-256 完全相同时，APK 只存一份字节，通过独立存储映射引用。解压后的根、数据、锁、身份及启动流程仍独立；不读取正式环境的已解压目录。正式版本以后变化时，构建自动重新打包旧的固定应急归档，不会跟随升级。映射不参与内容 runtimeId，因此已验收的应急舱不因去重而重建。
+
+## 宿主测试安装 / Host-test install
+
+`test-install/` 是应急运行时同一 DSH 版本的 npm 锁（只用于宿主测试 `recovery-agent`、`recovery-profile-boot`，不进入 APK）。
+CI 与本地用 `npm ci --prefix <dir> --ignore-scripts` 安装后，以 `run-host-tests.py --recovery-raw <dir>` 传入。
+`test-dsh-version-sites.py` 保证它与 `lock.json` 的 `dshVersion` 一致；正式 DSH 升级时不要改它。

@@ -326,6 +326,9 @@ def resolve(value, values):
     return value
 
 
+UNAVAILABLE_PREFIXES=("HOST_","BROWSER_REACT_NOT_PREPARED")
+
+
 def run_one(inputs, row, output):
     started = time.monotonic(); log = output / (Path(row["path"]).name + ".log")
     item = {"path": row["path"], "status": "FAILED", "log": str(log.relative_to(ROOT)) if log.is_relative_to(ROOT) else str(log)}
@@ -350,7 +353,11 @@ def run_one(inputs, row, output):
             result = subprocess.run(command, cwd=ROOT, env=env, stdout=stream, stderr=subprocess.STDOUT, timeout=row["timeoutSeconds"], check=False)
             item.update(exitCode=result.returncode,status="PASS" if result.returncode==0 else "FAILED")
     except Exception as error:
-        item.update(error=str(error),errorType=type(error).__name__,status="TIMEOUT" if isinstance(error,subprocess.TimeoutExpired) else "FAILED")
+        status="TIMEOUT" if isinstance(error,subprocess.TimeoutExpired) else "FAILED"
+        # A host requirement this machine cannot provide (HOST_*, BROWSER_REACT_NOT_PREPARED) is raised
+        # before the test body runs; with --unavailable-ok it is reported, not counted as a failure.
+        if status=="FAILED" and "command" not in item and str(error).startswith(UNAVAILABLE_PREFIXES):status="UNAVAILABLE"
+        item.update(error=str(error),errorType=type(error).__name__,status=status)
         with log.open("ab") as stream: stream.write(("\nRUNNER_ERROR: "+str(error)+"\n").encode("utf-8"))
     item["seconds"] = round(time.monotonic()-started,3)
     if log.is_file(): item["logSha256"] = hashlib.sha256(log.read_bytes()).hexdigest()
@@ -366,7 +373,7 @@ def main():
     parser.add_argument("--playwright");parser.add_argument("--browsers-path");parser.add_argument("--browser");parser.add_argument("--mobile-upstream",default=str(ROOT/"tools/mobile-plugin-upstream/lib"),help="Locked dsh-web-mobile lib (tools/mobile-plugin-upstream.lock.json); the test verifies every byte against pinned hashes")
     parser.add_argument("--linux-host");parser.add_argument("--wsl-distro",default="docker-desktop");parser.add_argument("--linux-tempdir",help="Explicit writable Linux fixture directory; no WSL repair or remount");parser.add_argument("--flavor",choices=("standard","low"),default="standard")
     parser.add_argument("--linux-native-inputs",default=str(ROOT/"app/build/audit-build156/linux-native"),help="Prepared NDK/Ubuntu sysroot receipt for the explicit WSL native handshake fixture")
-    parser.add_argument("--apks",nargs=2);parser.add_argument("--output",type=Path,default=ROOT/"app/build/host-tests")
+    parser.add_argument("--unavailable-ok",action="store_true",help="report tests whose host requirement is missing as UNAVAILABLE instead of failing (CI on a runner without Android toolchains/recovery archives)");parser.add_argument("--apks",nargs=2);parser.add_argument("--output",type=Path,default=ROOT/"app/build/host-tests")
     args=parser.parse_args()
     if sys.flags.optimize:parser.error("禁止 -O/PYTHONOPTIMIZE，测试断言必须执行")
     data=load_manifest()
@@ -393,7 +400,8 @@ def main():
             (output/"manifest.json").write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n",encoding="utf-8",newline="\n")
     finally:
         report["runtimeFixtureVerification"] = inputs.finalize()
-        report["failures"]=[row["path"] for row in report["tests"] if row["status"]!="PASS"]
+        report["failures"]=[row["path"] for row in report["tests"] if row["status"]!="PASS" and not (args.unavailable_ok and row["status"]=="UNAVAILABLE")]
+        report["unavailable"]=[{"path":row["path"],"error":row.get("error","")} for row in report["tests"] if row["status"]=="UNAVAILABLE"]
         if any(row["status"] != "PASS_FINAL_COMPLETE_BYTE_RECHECK" for row in report["runtimeFixtureVerification"]):
             report["failures"].append("runtime-fixture-final-verification")
             for row in report["tests"]:

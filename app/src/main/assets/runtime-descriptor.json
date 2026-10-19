@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "runtimeId": "a4cc4f0543a559741a9d2569ff2058262308f4c979e25e6001771354e52da979",
+  "runtimeId": "5d0ffd85a9f44f14f4ad68c4d02c6f5c7c3149dbc57ba812f2fb7c35a256d367",
   "baseVersion": "10",
   "dshVersion": "0.2.1-rc.2",
   "launcherContract": "DSHA_ARM64_V2",
@@ -733,7 +733,7 @@
     "plugin-acorn.cjs": "fdb08546776ec6228b03e8d02b40d4ab3255bae5f401adba7ff5dad927ac5c9c",
     "plugin-capabilities.cjs": "3e2dff25d2b88fc02401ab3f4a243b62c975544d546800db0b4c8417d18110a3",
     "plugin-capabilities.py": "00681393421a3071363aed729afa7d3e93b8ef198ec401d872016cb1ff9b0f37",
-    "plugin-client-seeds.py": "b9c0852ca4581d609fc8f023e7bdea8e6d9eb9bcea4dd7f5a43d7a8dd17980bb",
+    "plugin-client-seeds.py": "a650504d26b8c2571209a48dc8630c148657d3168fe52e68ee1e5d03dbb1e46f",
     "plugin-dependencies.py": "c5d1a2f88958e0cb42dfeabdaa28b1bc2e5ed9cbc74dfda28c46c359efb9f958",
     "plugin-lifecycle.py": "3a1cba5bb95586cf856b9758cc47ca4e19f748da625ff44582770a7217a254bb",
     "plugin-manager-auto-enable-patch.json": "386b69b1a151012dfce5407ea01487c6d8fbaa01927df763669883c0deb895d7",
