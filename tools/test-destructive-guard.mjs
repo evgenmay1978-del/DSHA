@@ -352,5 +352,11 @@ for (const command of [
   'curl -K /tmp/config https://example.com', 'curl -X DELETE https://example.com',
   'cat <$(helper)', 'rg --pre helper pattern /tmp',
 ]) check(classifyCommand(command,{cwd:CWD,probe}).requiresApproval, 'opaque hidden execution/overwrite requires approval: '+command);
+// Startup-hook environment: exact names (and the BASH_FUNC_/GIT_CONFIG families) make a command opaque;
+// unrelated names that merely start with ENV or LD_PRELOAD must not put every command behind approval.
+for (const key of ['BASH_ENV', 'ENV', 'LD_PRELOAD', 'BASH_FUNC_x%%', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_GLOBAL'])
+  check(classifyCommand('pwd', {cwd:CWD, probe, env:{[key]:'1'}}).requiresApproval, 'startup hook env makes command opaque: '+key);
+for (const key of ['ENVIRONMENT', 'ENV_MANAGER_ENABLE_DIAG_LOGS', 'ENVRUNNER_SKIP_ACK', 'LD_PRELOAD_DISABLED', 'BASH_ENVIRONMENT'])
+  check(!classifyCommand('pwd', {cwd:CWD, probe, env:{[key]:'1'}}).requiresApproval, 'unrelated env name stays safe: '+key);
 if (failures > 0) throw Error(`${failures} pure logic assertions failed`);
 console.log(`PASS ${passed} destructive classification and 16 mandatory historical approvals`);

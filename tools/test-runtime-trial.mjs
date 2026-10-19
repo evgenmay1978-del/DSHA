@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {testRuntime} from './test-runtime-fixture.mjs';
+import {testRuntime,lockedDshVersion} from './test-runtime-fixture.mjs';
 // 桌面协议回归：真实 JSON 存储后端 + 合成浏览器事件。不是 Android / Gecko 健康证明。
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -54,7 +54,7 @@ try{
   const rest='--import='+pathToFileURL(other).href+' --conditions=dsha-trial-host-check';
   const child=spawnSync(process.execPath,[path.join(modules,'@deepseek-ai/dsh/lib/bin.js'),'--version'],{encoding:'utf8',timeout:15000,windowsHide:true,env:{...process.env,NODE_OPTIONS:'--import='+pathToFileURL(preload).href+' '+rest}});
   assert.equal(child.error,undefined);assert.equal(child.status,0,child.stderr);
-  assert.equal(child.stdout,'0.2.0-rc.2\n');assert.equal(child.stderr,'DSHA_TEST_OTHER_PRELOAD_READY\n');
+  assert.equal(child.stdout,lockedDshVersion()+'\n');assert.equal(child.stderr,'DSHA_TEST_OTHER_PRELOAD_READY\n');
  });
  await test('private_trial_preload_is_not_inherited_by_fresh_storage_child',async()=>{
   const preload=path.join(owned,'trial-preload.mjs'),other=path.join(owned,'other-preload.mjs'),probe=path.join(owned,'child-probe.mjs');

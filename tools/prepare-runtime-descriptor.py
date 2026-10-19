@@ -15,8 +15,17 @@ ROOT = Path(__file__).resolve().parents[1]
 # expose the v4 session catalog and identical storage-json implementation), so
 # an upgrade may read the previous runtime's records.  Keep this list narrow:
 # a future runtime must add a reviewed entry here after comparing its readers.
+#
+# DSH 0.2.1-rc.2 (reviewed against the locked 0.2.0-rc.2 tree): dsh-storage-json,
+# the session format catalog, dsh-session-format and the v0..v3 migrators are
+# byte-identical; the v3-to-v4 migrator only additionally accepts version-2
+# "external" subagent catalog facts, and the storage domain declarations
+# (version/compatibleVersions) are unchanged.  So it reads everything 0.2.0-rc.2
+# wrote.  The reverse is not true (0.2.0-rc.2 rejects "external" facts), which is
+# why dataWrite moves to dsh-0.2.1-rc.2 and a rollback must not reuse new data.
 READ_COMPATIBILITY = {
     '0.2.0-rc.2': ['dsh-0.1.7-rc.1', 'dsh-0.1.7-rc.2'],
+    '0.2.1-rc.2': ['dsh-0.1.7-rc.1', 'dsh-0.1.7-rc.2', 'dsh-0.2.0-rc.2'],
 }
 
 def digest(path):

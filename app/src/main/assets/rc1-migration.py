@@ -5,7 +5,7 @@ import argparse, hashlib, json, os, re, shutil, stat, tempfile, time, traceback,
 from pathlib import Path
 
 # Dependency version for converted preset candidates, not a data-format claim.
-VERSION = '0.2.0-rc.2'
+VERSION = '0.2.1-rc.2'
 # Stable asset marker: settings.yaml.imported is a retryable input after a
 # pending section result; it never authorizes a false committed receipt.
 RESTORED_SETTINGS_IMPORTED_FOR_RETRY = True
@@ -161,7 +161,7 @@ def snapshot_row(folder, dsh, logical, actual, links, kind, ordinal):
     if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns): raise ValueError('SOURCE_CHANGED_DURING_SNAPSHOT')
     if digest(destination) != sha.hexdigest(): raise ValueError('SNAPSHOT_READBACK_FAILED')
     return dict(kind=kind, path=relative, size=total, sha256=sha.hexdigest(), snapshot=destination.relative_to(folder).as_posix(), links=links,
-                mapping=str(actual), sourceIdentity=[str(before.st_dev),str(before.st_ino)], type='file')
+                mapping=str(actual), sourceIdentity=[str(before.st_dev),str(before.st_ino)], sourceMtimeNs=str(before.st_mtime_ns), type='file')
 
 
 def inventory(dsh, resolver):
@@ -188,6 +188,7 @@ def reusable_rows(folder, doc, entries):
     for row in doc.get('snapshotInventory', []) + doc.get('sources', []):
         entry = expected.get(row.get('path'))
         if not entry or row.get('sha256') != entry['sha256'] or row.get('sourceIdentity') != entry['identity'][:2] or row.get('links') != entry['links']: continue
+        if row.get('sourceMtimeNs') is not None and row['sourceMtimeNs'] != str(entry['identity'][3]): continue
         name = row.get('snapshot', '')
         if not re.fullmatch(r'snapshots/[0-9]+(?:-[a-f0-9]{32})?',name): continue
         source = folder/name
@@ -357,8 +358,14 @@ def finalize(root, state_root=None, startup_id='manual', approved=()):
             if row['kind']=='profile': continue
             # 当前 V4 会话可续写，不承诺运行中旧快照等于活动文件；旧代日志不可改写。
             if row['kind']=='session' and re.search(r'session\.v4\.',row['path']): continue
-            identity = [str(os.stat(actual).st_dev), str(os.stat(actual).st_ino)]
+            node = os.stat(actual)
+            identity = [str(node.st_dev), str(node.st_ino)]
             if row.get('sourceIdentity') and identity != row['sourceIdentity']:
+                raise ValueError('SOURCE_IDENTITY_CHANGED')
+            # Linux/Android file systems reuse a freed inode at once, so (device, inode) alone
+            # cannot tell a deleted-and-recreated file from the original; its modification time
+            # can (a rename such as settings.yaml -> .imported keeps it). Older records lack it.
+            if row.get('sourceMtimeNs') is not None and str(node.st_mtime_ns) != row['sourceMtimeNs']:
                 raise ValueError('SOURCE_IDENTITY_CHANGED')
             if digest(actual)!=row['sha256']: raise ValueError('SOURCE_CHANGED')
         except (OSError,ValueError): preserved=False; warnings.append('SOURCE_MISSING_OR_CHANGED:'+row['path'])

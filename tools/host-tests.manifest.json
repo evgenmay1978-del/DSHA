@@ -738,23 +738,6 @@
       "cli": "no positional arguments; see explicit environment/requirements"
     },
     {
-      "path": "tools/test-lexical-claim-compat.mjs",
-      "stage": "runtime",
-      "reason": "Current source/verified runtime host fixture; explicit dependencies and sandbox HOME; no Android device operations",
-      "args": [],
-      "timeoutSeconds": 900,
-      "requires": [
-        "node24",
-        "raw",
-        "current_archive",
-        "tar"
-      ],
-      "environment": {
-        "DSHA_RUNTIME_ARCHIVE": "{runtimeArchive}"
-      },
-      "cli": "no positional arguments; see explicit environment/requirements"
-    },
-    {
       "path": "tools/test-low-preview-capability.mjs",
       "stage": "fast",
       "reason": "Current Java-embedded WebView capability probe and Low selection source check; no device",
@@ -1382,7 +1365,7 @@
       "timeoutSeconds": 900,
       "requires": [
         "node24",
-        "raw"
+        "recovery_raw"
       ],
       "environment": {},
       "cli": "no positional arguments; see explicit environment/requirements"
@@ -1433,7 +1416,7 @@
       "timeoutSeconds": 900,
       "requires": [
         "node24",
-        "raw",
+        "recovery_raw",
         "browser"
       ],
       "environment": {},
@@ -2116,6 +2099,29 @@
         "--verify-archive"
       ],
       "cli": "--verify-archive; current source/marker/lock bytes and production builder through DSHA_PYTHON; no APK/archive generation or fixture-pointer mutation"
+    },
+    {
+      "path": "tools/test-dsh-version-sites.py",
+      "stage": "fast",
+      "reason": "Every copy of the bundled DSH version (Java constant, Gradle name, migration helper, plugin peers, recipes, generated proofs) matches tools/dsh-runtime/package.json; setter rewrites copies in a temp tree only",
+      "requires": [
+        "python39"
+      ],
+      "environment": {},
+      "timeoutSeconds": 120,
+      "args": []
+    },
+    {
+      "path": "tools/test-runtime-patch-anchors.py",
+      "stage": "runtime",
+      "reason": "Every runtime patch recipe applied in memory to the locked raw DSH tree (anchor found exactly once, in order); read-only, no fixture mutation",
+      "requires": [
+        "python39",
+        "raw"
+      ],
+      "environment": {},
+      "timeoutSeconds": 300,
+      "args": []
     }
   ],
   "historicalExcluded": [

@@ -73,7 +73,7 @@ def prepare(args):
     for name,file in builder.destructive_policy_files().items():
         shutil.copyfile(file,policy/name)
     overlays={}
-    builder_owned = {'deepseek-messages-compat-patch.json','lexical-claim-patch.json','conversation-materialized-patch.json','client-combo-patch.json'}
+    builder_owned = {'deepseek-messages-compat-patch.json','conversation-materialized-patch.json','client-combo-patch.json'}
     registry=json.loads((ASSETS/'runtime-patches.json').read_text(encoding='utf8'))
     if registry.get('schema')!=1 or registry.get('dshVersion')!=version:raise ValueError('PATCH_REGISTRY_VERSION')
     selected=[row['asset'] for row in registry['active']]

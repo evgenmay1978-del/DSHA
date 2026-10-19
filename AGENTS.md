@@ -28,7 +28,7 @@ DSHA 重构骨架。本文让你不扫全库就能上手 —— 读它之前先�
 ## 一句话
 
 APK 用 bxroot/proot 把完整 Ubuntu rootfs 搬进 app 私有目录，在里面跑 Node 24 +
-pnpm + `@deepseek-ai/dsh`（**0.2.0-rc.2**）的 Web UI（默认动态端口，手动模式可指定 `3080`）。原生层是纯 Java 17、
+pnpm + `@deepseek-ai/dsh`（**0.2.1-rc.2**）的 Web UI（默认动态端口，手动模式可指定 `3080`）。原生层是纯 Java 17、
 Material3、单 Gradle 模块 `:app`。
 
 ## 技术约束（围绕这些设计）
@@ -188,6 +188,18 @@ Web 生命周期、LAN 鉴权、配置维护与运行环境准备由明确协作
 - env：`DSH_HOME=/root/.dsh`、`DEEPSEEK_API_KEY`（非空才加入进程环境，不放 argv）、`DSH_PERMISSION_MODE`、`DSH_CONFIRM`（由 `ConfigStore.isConfirmShell()` 决定）、`BROWSER=true`、`cd /root`。
 - 写 pid 文件要在 `exec` 之前（`exec` 不换 pid）。
 - proot 二进制从 `nativeLibraryDir/libproot.so` 执行（**不能放 filesDir**，Android 10+ W^X）；依赖 `libprootloader.so`/`libtalloc.so` 靠 `PROOT_LOADER`/`LD_LIBRARY_PATH` 引导。
+
+### 升级内置 DSH（核心）
+
+`tools/dsh-runtime/package.json` 是版本唯一来源，其余副本由工具检查/改写：
+
+1. `python3 tools/set-dsh-version.py <新版本>` — 改锁中的官方包与机械副本（Java 常量、`versionName`、迁移脚本、内置插件 peer），并打印后续步骤。
+2. `npm install --package-lock-only ...` → `python3 tools/prepare-dsh-runtime.py`（构建器自有锚点在此失败）。
+3. `python3 tools/scan-runtime-patches.py app/build/locked-dsh-runtime/node_modules` 一次列出所有失效锚点；全部移植后加 `--stamp` 写入版本。
+4. 重新生成工具身份配方、React 种子证明、`managed-package-proofs.json`、第三方声明、描述符；审阅 `READ_COMPATIBILITY`。
+5. `python3 tools/set-dsh-version.py --check` 无输出，`run-host-tests --stage fast/runtime` 通过（CI 的 *Runtime checks* 也会跑 runtime 阶段）。
+
+应急运行时（`tools/recovery-runtime`）不随核心升级；其宿主测试安装在 `tools/recovery-runtime/test-install`。
 
 ## 编码约定
 

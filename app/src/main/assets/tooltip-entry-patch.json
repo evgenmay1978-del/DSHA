@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "dshVersion": "0.2.0-rc.2",
+  "dshVersion": "0.2.1-rc.2",
   "module": "@deepseek-ai/dsh-web-frontend/dist/index.html",
   "patches": [
     {
-      "before": "src=\"./assets/index-5SrrfWpU.js\"",
-      "after": "src=\"./assets/index-5SrrfWpU.js?dsha-tooltip=rc2-1\""
+      "before": "src=\"./assets/index-CN7NIWNw.js\"",
+      "after": "src=\"./assets/index-CN7NIWNw.js?dsha-tooltip=rc2-1\""
     }
   ]
 }

@@ -4,14 +4,14 @@ import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 import path from 'node:path';
-import {testRuntime} from './test-runtime-fixture.mjs';
+import {testRuntime,lockedDshVersion} from './test-runtime-fixture.mjs';
 // Split from test-task-progress.mjs: the checks that need the real locked rc2 dsh-subprocess scrubber.
 // The variables are set before scrubbing, so the scrubber itself (not the notifier) must remove them.
 const webRegistration={DSH_TASK_GENERATION:'3',DSH_TASK_INSTANCE:'actual-runtime',DSH_TASK_TOKEN:'a'.repeat(64)};
 // Import the actual canonical rc2 scrubber used by bash/MCP/PTY launchers.
 const raw=testRuntime('raw');
 const subprocessSource=path.join(raw,'node_modules/@deepseek-ai/dsh-subprocess/lib/index.js');
-assert.equal(JSON.parse(readFileSync(path.join(raw,'node_modules/@deepseek-ai/dsh-subprocess/package.json'),'utf8')).version,'0.2.0-rc.2');
+assert.equal(JSON.parse(readFileSync(path.join(raw,'node_modules/@deepseek-ai/dsh-subprocess/package.json'),'utf8')).version,lockedDshVersion());
 const {scrubbedParentEnv}=await import(pathToFileURL(subprocessSource).href);
 for(const [key,value]of Object.entries(webRegistration)) process.env[key]=value;
 const filtered=scrubbedParentEnv();

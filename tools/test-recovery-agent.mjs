@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..');
-const expectedDsh = JSON.parse(await readFile(path.join(root, 'tools/dsh-runtime/package.json'), 'utf8')).dependencies['@deepseek-ai/dsh'];
+const expectedDsh = JSON.parse(await readFile(path.join(root, 'tools/recovery-runtime/lock.json'), 'utf8')).dshVersion;
 const fixture = JSON.parse(await readFile(path.join(root, 'app/build/test-runtimes/current.json'), 'utf8'));
 const runtime = process.env.DSHA_TEST_RUNTIME || fixture.raw;
 const requireRuntime = createRequire(path.join(runtime, 'package.json'));
