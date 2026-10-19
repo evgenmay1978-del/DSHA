@@ -195,6 +195,8 @@ Web 生命周期、LAN 鉴权、配置维护与运行环境准备由明确协作
 2. 一次性：`keytool -genkeypair -keystore dsha-fork.jks -alias dsha -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=DSHA fork"`，再 `python3 tools/set-release-identity.py --keystore dsha-fork.jks --alias dsha` 并提交 `ci/release-identity.json`。keystore 只保存在所有者处（或仓库 Secrets）。
 3. `python3 tools/ci-assets.py --pack <zip>` → `ci-package` → `release`（或本地 `tools/sign-release-apks.py`）。
 
+原生库已入库：`libbxroot*.so` 由 Ubuntu 24.04 amd64 + 锁定 GCC13 arm64 cross 包按 `tools/bxroot/README.md` 复建，与 `tools/bxroot/lock.json` 逐字节一致（源码归档可用 `git archive --prefix=bxroot-<commit>/ <commit> | gzip -n` 复现）；`libdsha-session.so` 是 Linux NDK 26.3 `tools/native-session/build.py` 的可复现产物（ci-package 用 `--check` 复核）。改动它们后必须 `prepare-runtime-descriptor.py --write`（在 Linux 上运行：路径排序与 Windows 不同）。
+
 ### 升级内置 DSH（核心）
 
 `tools/dsh-runtime/package.json` 是版本唯一来源，其余副本由工具检查/改写：
