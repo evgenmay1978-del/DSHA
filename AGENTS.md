@@ -189,6 +189,12 @@ Web 生命周期、LAN 鉴权、配置维护与运行环境准备由明确协作
 - 写 pid 文件要在 `exec` 之前（`exec` 不换 pid）。
 - proot 二进制从 `nativeLibraryDir/libproot.so` 执行（**不能放 filesDir**，Android 10+ W^X）；依赖 `libprootloader.so`/`libtalloc.so` 靠 `PROOT_LOADER`/`LD_LIBRARY_PATH` 引导。
 
+### 分支自建 APK（独立应用）
+
+1. `python3 tools/prepare-dsh-runtime.py` 生成 `dsh-runtime.bin`；`python3 tools/import-apk-assets.py <已发布 APK> --recovery` 取回并核对 rootfs、`ubuntu-tools.bin`，补齐应急归档（`recovery-dsh-runtime.bin` 复制自 `dsh-runtime.bin`）。
+2. 一次性：`keytool -genkeypair -keystore dsha-fork.jks -alias dsha -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=DSHA fork"`，再 `python3 tools/set-release-identity.py --keystore dsha-fork.jks --alias dsha` 并提交 `ci/release-identity.json`。keystore 只保存在所有者处（或仓库 Secrets）。
+3. `python3 tools/ci-assets.py --pack <zip>` → `ci-package` → `release`（或本地 `tools/sign-release-apks.py`）。
+
 ### 升级内置 DSH（核心）
 
 `tools/dsh-runtime/package.json` 是版本唯一来源，其余副本由工具检查/改写：

@@ -38,14 +38,14 @@ class ReleaseEvidenceTest(unittest.TestCase):
                 archive.writestr('assets/runtime-descriptor.json',json.dumps(dict(runtimeId='c'*64)))
                 archive.writestr('flavor',flavor)
             self.apks.append(dict(flavor=flavor,versionCode=147,sha256=gate.digest(candidate),path=str(candidate),
-                                  package='com.dsh.client',certificateSha256=gate.CERT,debuggable=False))
+                                  package=gate.PACKAGE,certificateSha256=gate.CERT,debuggable=False))
         checks=['web-ready','existing-data-preserved','plugins-visible','recovery-ready','no-crash']
-        self.proof={'schema':2,'package':'com.dsh.client','certificateSha256':gate.CERT,
+        self.proof={'schema':2,'package':gate.PACKAGE,'certificateSha256':gate.CERT,
                     'versionCode':147,'serial':'test-device','firstInstallTimePreserved':True,
                     'nonDestructive':True,'flavors':{}}
         for item in self.apks:
             flavor=item['flavor']
-            before=dict(package='com.dsh.client',certificateSha256=gate.CERT,debuggable=False,
+            before=dict(package=gate.PACKAGE,certificateSha256=gate.CERT,debuggable=False,
                         uid=10123,firstInstallTime='2026-09-01 12:00:00',versionCode=146)
             after={**before,'versionCode':147,'apkSha256':item['sha256']}
             self.proof['flavors'][flavor]=dict(sha256=item['sha256'],result='PASS',checks=list(checks),
@@ -197,7 +197,7 @@ class ReleaseEvidenceTest(unittest.TestCase):
             for flavor in ('standard','low'):
                 apk=root/(flavor+'.apk');apk.write_bytes(flavor.encode())
                 apks.append(dict(flavor=flavor,path=str(apk),sha256=gate.digest(apk),
-                                 package='com.dsh.client',versionCode=version_code,
+                                 package=gate.PACKAGE,versionCode=version_code,
                                  versionName=version_name+('low' if flavor=='low' else ''),
                                  minSdk=23 if flavor=='low' else 30,targetSdk=37,abi=['arm64-v8a'],
                                  certificateSha256=gate.CERT,debuggable=False))

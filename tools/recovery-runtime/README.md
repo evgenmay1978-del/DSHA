@@ -13,3 +13,7 @@
 `test-install/` 是应急运行时同一 DSH 版本的 npm 锁（只用于宿主测试 `recovery-agent`、`recovery-profile-boot`，不进入 APK）。
 CI 与本地用 `npm ci --prefix <dir> --ignore-scripts` 安装后，以 `run-host-tests.py --recovery-raw <dir>` 传入。
 `test-dsh-version-sites.py` 保证它与 `lock.json` 的 `dshVersion` 一致；正式 DSH 升级时不要改它。
+
+## 0.2.1 迁移
+
+应急运行时已随核心升至 DSH 0.2.1-rc.2：`recovery-dsh-runtime.bin` 与正式 `dsh-runtime.bin` 相同（`1aec5e7e…`），`recovery-rootfs.bin` 仍为 `b9fe8a04…`。`archives/` 可由 `tools/import-apk-assets.py <APK> --recovery` 与复制 `dsh-runtime.bin` 得到。
