@@ -23,8 +23,6 @@ COMBO_PATCH = HOOKS.parent / 'client-combo-patch.json'
 COMBO_MODULE = '@deepseek-ai/dsh-client-modules/lib/index.js'
 DEEPSEEK_MESSAGES_PATCH = HOOKS.parent / 'deepseek-messages-compat-patch.json'
 DEEPSEEK_MESSAGES_MODULE = '@deepseek-ai/dsh-llm-deepseek/lib/index.js'
-LEXICAL_CLAIM_PATCH = HOOKS.parent / 'lexical-claim-patch.json'
-LEXICAL_CLAIM_MODULE = '@deepseek-ai/dsh-client-ui-conversation/lib/client.js'
 CONVERSATION_MATERIALIZED_PATCH = HOOKS.parent / 'conversation-materialized-patch.json'
 CONVERSATION_MATERIALIZED_MODULE = '@deepseek-ai/dsh-client-ui-conversation/lib/client.js'
 RC1_SETTINGS_PATCH = HOOKS.parent / 'rc1-settings-migration-patch.json'
@@ -75,7 +73,6 @@ def recipe_inputs():
     paths += [directory / name for directory in (HOOKS, SESSION_HOOKS, COMBO_HOOKS) for name in ('index.js', 'package.json')]
     paths.append(COMBO_PATCH)
     paths.append(DEEPSEEK_MESSAGES_PATCH)
-    paths.append(LEXICAL_CLAIM_PATCH)
     paths.append(CONVERSATION_MATERIALIZED_PATCH)
     paths.append(RC1_SETTINGS_PATCH)
     paths.append(WORKSPACE_DIRECTORY_PATCH)
@@ -120,11 +117,12 @@ def patched_content(relative, data):
                 after = (HOOKS.parent / patch['prependAsset']).read_text(encoding='utf-8') + '\n' + after
             text = text.replace(before, after)
         return text.encode('utf-8')
-    if name == LEXICAL_CLAIM_MODULE:
+    if name == CONVERSATION_MATERIALIZED_MODULE:
         text = data.decode('utf-8')
         expected = json.loads((LOCK_ROOT / 'package.json').read_text(encoding='utf-8'))['dependencies']['@deepseek-ai/dsh']
-        for recipe_path, label in ((LEXICAL_CLAIM_PATCH, 'Lexical claim'),
-                                   (CONVERSATION_MATERIALIZED_PATCH, 'conversation materialized')):
+        # 0.2.1 replaced the styled claim-token leaf with CommandChip nodes, so the
+        # Lexical splitText style guard (lexical-claim-patch.json) has no target any more.
+        for recipe_path, label in ((CONVERSATION_MATERIALIZED_PATCH, 'conversation materialized'),):
             recipe = json.loads(recipe_path.read_text(encoding='utf-8'))
             if recipe.get('module') != name or recipe.get('dshVersion') != expected:
                 raise ValueError(f'{label} 补丁目标或 DSH 版本未锁定')
@@ -478,11 +476,12 @@ var DshaRecordHints = class {
             raise ValueError('会话 create 结构变化，必须重新检查')
         text = text.replace(create_anchor, create_replacement)
         # The emitted JS has no private field declarations. Add the field next
-        # to the tracker declaration in the class body instead.
-        class_anchor = '''\ttracker = new JsonlBackendTracker(this.name);\n\tgenerationFormat;'''
+        # to the tracker declaration in the class body instead (0.2.1 injects the
+        # tracker through the constructor, so the declaration has no initializer).
+        class_anchor = '''\tconfig;\n\ttracker;\n'''
         if text.count(class_anchor) != 1:
             raise ValueError('会话后端 tracker 结构变化，必须重新检查')
-        text = text.replace(class_anchor, '''\ttracker = new JsonlBackendTracker(this.name);\n\tdshaSessionHints = new DshaSessionHints();\n\tgenerationFormat;''')
+        text = text.replace(class_anchor, '''\tconfig;\n\ttracker;\n\tdshaSessionHints = new DshaSessionHints();\n''')
         find_anchor = '''\tasync findLog(id, signal) {\n\t\tconst matches = [];'''
         find_replacement = '''\tasync findLog(id, signal) {\n\t\tconst hinted = this.dshaSessionHints.get(id);\n\t\tif (hinted !== void 0) {\n\t\t\tconst selected = await this.resolveHintedGeneration(hinted, id, signal);\n\t\t\tif (selected !== void 0) return selected;\n\t\t\tthis.dshaSessionHints.forget(id);\n\t\t}\n\t\tconst matches = [];'''
         if text.count(find_anchor) != 1:
@@ -498,7 +497,7 @@ var DshaRecordHints = class {
         if text.count(release_anchor) != 1:
             raise ValueError('会话 releaseHandle 结构变化，必须重新检查')
         text = text.replace(release_anchor, release_replacement)
-        hints_anchor = '''/**\n* The JSONL persistence backend.'''
+        hints_anchor = '''/**\n* The JSONL backend registered as `ctx.sessionPersistence`'''
         hints_code = '''/* DSHA_SESSION_DIRECT_HINTS_V1 */\nclass DshaSessionHints {\n\tentries = new Map();\n\tremember(header) {\n\t\tif (header && typeof header.id === "string") this.entries.set(header.id, { id: header.id, cwd: header.cwd });\n\t}\n\tget(id) { return this.entries.get(id); }\n\tforget(id) { this.entries.delete(id); }\n}\n'''
         if text.count(hints_anchor) != 1:
             raise ValueError('会话后端类锚点变化，必须重新检查')
@@ -636,7 +635,7 @@ def build(source, output, version):
                             binaries.append(relative.as_posix())
                         content = patched_content(relative, stream.read()) if relative.as_posix() in PATCHES \
                             or relative.as_posix() in (COMBO_MODULE, DEEPSEEK_MESSAGES_MODULE,
-                                                       LEXICAL_CLAIM_MODULE, CONVERSATION_MATERIALIZED_MODULE,
+                                                       CONVERSATION_MATERIALIZED_MODULE,
                                                        STORAGE_JSON_MODULE,
                                                        WORKSPACE_DIRECTORY_MODULE,
                                                        SESSION_PERSISTENCE_JSONL_MODULE,

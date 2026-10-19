@@ -121,7 +121,7 @@ def closure(root, starts, global_dirs, resolve_module, follow_packages):
 def proof(global_dirs):
     record_file = Path(__file__).with_name('client-seed-proof.json')
     record = json.loads(record_file.read_text(encoding='utf8'))
-    if record.get('schema') != 1 or record.get('dshVersion') != '0.2.0-rc.2' or set(record.get('seeds', {})) != {'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client'}:
+    if record.get('schema') != 1 or record.get('dshVersion') != '0.2.1-rc.2' or set(record.get('seeds', {})) != {'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client'}:
         raise ValueError('CLIENT_SEED_PROOF_INVALID')
     # current() 的第二项是实际 dsh 安装锚点，不能借用户 HOME 中的同名旧前端证明。
     for base in (global_dirs[1:2] if len(global_dirs) > 1 else global_dirs):

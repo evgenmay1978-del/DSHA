@@ -4,9 +4,9 @@
 
 ## DSH 与 npm 依赖
 
-- 当前 `@deepseek-ai/dsh` 为 **0.2.0-rc.2**。完整版本、来源与 integrity 见 `tools/dsh-runtime/package-lock.json`；各包原许可文件保留在运行归档中。
+- 当前 `@deepseek-ai/dsh` 为 **0.2.1-rc.2**。完整版本、来源与 integrity 见 `tools/dsh-runtime/package-lock.json`；各包原许可文件保留在运行归档中。
 - DSHA 自有运行包 `dsha-runtime-fs` **1.0.0**、`dsha-session-compat` **1.0.0**、`dsha-client-combo-cache` **1.0.0**、`dsha-destructive-policy` **1.0.0** 采用本仓库 MIT 许可；精确来源为对应 `app/src/main/assets` 源码和 `LICENSE`（Copyright (c) 2026 qiannianhuanxiang），完整原文随 `assets/licenses/DSHA-MIT.txt` 提供并与仓库原件逐字节核对。自有包仅按固定名称、版本和完整 package.json 注册，不扩展到其它同前缀包或 MIT 声明。
-- Office 入口 `@deepseek-ai/libreoffice-kit` **0.1.2**、WASM **0.1.1**：保留上游 NOTICE、licenses、sources 与预构建说明。DSHA 的字体路径适配见 `assets/office-fonts-patch.json`。
+- Office 入口 `@deepseek-ai/libreoffice-kit` **0.1.5**、WASM **0.1.5**：保留上游 NOTICE、licenses、sources 与预构建说明。DSHA 的字体路径适配见 `assets/office-fonts-patch.json`。
 - pnpm **10.34.5**（MIT）和 certifi **2026.7.22**（MPL-2.0）：版本和原包摘要由 `tools/runtime-tools.lock.json` 固定。CA 未关闭 TLS 核验。
 - 许可目录和实际依赖需结合归档成员检查；锁文件内其他平台可选依赖不等于已进入 arm64 APK。
 - core-js **3.50.0**（MIT），原包来源 `https://registry.npmjs.org/core-js/-/core-js-3.50.0.tgz`，全文为 `assets/web-integration/core-js.LICENSE`。
@@ -93,12 +93,12 @@
 
 | 锁内路径 | 版本 | 上游声明 | 原包来源 |
 |---|---|---|---|
-| `node_modules/@deepseek-ai/libreoffice-kit` | 0.1.2 | MPL-2.0 | https://registry.npmjs.org/@deepseek-ai/libreoffice-kit/-/libreoffice-kit-0.1.2.tgz |
-| `node_modules/@deepseek-ai/libreoffice-kit-darwin-arm64` | 0.1.1 | MPL-2.0 | https://registry.npmjs.org/@deepseek-ai/libreoffice-kit-darwin-arm64/-/libreoffice-kit-darwin-arm64-0.1.1.tgz |
-| `node_modules/@deepseek-ai/libreoffice-kit-darwin-x64` | 0.1.1 | MPL-2.0 | https://registry.npmjs.org/@deepseek-ai/libreoffice-kit-darwin-x64/-/libreoffice-kit-darwin-x64-0.1.1.tgz |
-| `node_modules/@deepseek-ai/libreoffice-kit-wasm` | 0.1.1 | MPL-2.0 | https://registry.npmjs.org/@deepseek-ai/libreoffice-kit-wasm/-/libreoffice-kit-wasm-0.1.1.tgz |
-| `node_modules/@deepseek-ai/libreoffice-kit-win32-arm64` | 0.1.2 | MPL-2.0 | https://registry.npmjs.org/@deepseek-ai/libreoffice-kit-win32-arm64/-/libreoffice-kit-win32-arm64-0.1.2.tgz |
-| `node_modules/@deepseek-ai/libreoffice-kit-win32-x64` | 0.1.2 | MPL-2.0 | https://registry.npmjs.org/@deepseek-ai/libreoffice-kit-win32-x64/-/libreoffice-kit-win32-x64-0.1.2.tgz |
+| `node_modules/@deepseek-ai/libreoffice-kit` | 0.1.5 | MPL-2.0 | https://registry.npmjs.org/@deepseek-ai/libreoffice-kit/-/libreoffice-kit-0.1.5.tgz |
+| `node_modules/@deepseek-ai/libreoffice-kit-darwin-arm64` | 0.1.5 | MPL-2.0 | https://registry.npmjs.org/@deepseek-ai/libreoffice-kit-darwin-arm64/-/libreoffice-kit-darwin-arm64-0.1.5.tgz |
+| `node_modules/@deepseek-ai/libreoffice-kit-darwin-x64` | 0.1.5 | MPL-2.0 | https://registry.npmjs.org/@deepseek-ai/libreoffice-kit-darwin-x64/-/libreoffice-kit-darwin-x64-0.1.5.tgz |
+| `node_modules/@deepseek-ai/libreoffice-kit-wasm` | 0.1.5 | MPL-2.0 | https://registry.npmjs.org/@deepseek-ai/libreoffice-kit-wasm/-/libreoffice-kit-wasm-0.1.5.tgz |
+| `node_modules/@deepseek-ai/libreoffice-kit-win32-arm64` | 0.1.5 | MPL-2.0 | https://registry.npmjs.org/@deepseek-ai/libreoffice-kit-win32-arm64/-/libreoffice-kit-win32-arm64-0.1.5.tgz |
+| `node_modules/@deepseek-ai/libreoffice-kit-win32-x64` | 0.1.5 | MPL-2.0 | https://registry.npmjs.org/@deepseek-ai/libreoffice-kit-win32-x64/-/libreoffice-kit-win32-x64-0.1.5.tgz |
 | `node_modules/@img/sharp-libvips-darwin-arm64` | 1.3.4 | LGPL-3.0-or-later | https://registry.npmjs.org/@img/sharp-libvips-darwin-arm64/-/sharp-libvips-darwin-arm64-1.3.4.tgz |
 | `node_modules/@img/sharp-libvips-darwin-x64` | 1.3.4 | LGPL-3.0-or-later | https://registry.npmjs.org/@img/sharp-libvips-darwin-x64/-/sharp-libvips-darwin-x64-1.3.4.tgz |
 | `node_modules/@img/sharp-libvips-linux-arm` | 1.3.4 | LGPL-3.0-or-later | https://registry.npmjs.org/@img/sharp-libvips-linux-arm/-/sharp-libvips-linux-arm-1.3.4.tgz |

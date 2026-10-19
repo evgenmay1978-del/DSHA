@@ -17,7 +17,7 @@ from source_snapshot import snapshot as complete_source_snapshot
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "tools/host-tests.manifest.json"
 STAGES = ("fast", "runtime", "package", "windows", "linux")
-REQUIRES = {"node24", "python39", "powershell", "raw", "managed", "browser", "browser_react", "jdk17", "pnpm", "current_archive", "tar", "guide_fixture", "native_host", "generated_recovery", "mobile_upstream", "git_bash", "toolchains", "debug_classes", "linux_node", "linux_publish_packages", "semver_reference"}
+REQUIRES = {"node24", "python39", "powershell", "raw", "recovery_raw", "managed", "browser", "browser_react", "jdk17", "pnpm", "current_archive", "tar", "guide_fixture", "native_host", "generated_recovery", "mobile_upstream", "git_bash", "toolchains", "debug_classes", "linux_node", "linux_publish_packages", "semver_reference"}
 TOKENS = {"apks", "fixture", "posixFixture", "modules", "managedModules", "managedStorageModule", "raw", "managed", "rawSemver", "rawConversationModule", "reactReference", "pnpmCli", "runtimeArchive", "recoveryAssets", "mobileUpstream", "guideFixture", "toolchainRoot", "sdk", "gradleCache", "gradleHome", "jdk", "flavor", "linuxPublisher", "linuxHost", "linuxNativeInputs", "wslDistro", "linuxTempdir", "robolectricCache"}
 
 
@@ -192,6 +192,21 @@ class Inputs:
         if "raw" in req or "native_host" in req or "current_archive" in req:
             raw = self.runtime("raw", "current_archive" in req)
             values.update(raw=str(raw), modules=str(raw / "node_modules"), rawSemver=str(raw / "node_modules/semver"), rawConversationModule=str(raw / "node_modules/@deepseek-ai/dsh-client-ui-conversation/lib/client.js"))
+        if "recovery_raw" in req:
+            # recovery-agent.js runs inside the fixed emergency runtime (tools/recovery-runtime/lock.json),
+            # which deliberately does not follow main-runtime upgrades. Test it against that ABI.
+            locked = json.loads((ROOT / "tools/recovery-runtime/lock.json").read_text(encoding="utf-8"))["dshVersion"]
+            main = json.loads((ROOT / "tools/dsh-runtime/package.json").read_text(encoding="utf-8"))["dependencies"]["@deepseek-ai/dsh"]
+            if self.args.recovery_raw:
+                candidate = Path(self.args.recovery_raw).resolve()
+            elif main == locked:
+                candidate = self.runtime("raw")
+            else:
+                raise ValueError("HOST_RECOVERY_RAW_REQUIRED: pass --recovery-raw with a DSH " + locked + " install")
+            actual = json.loads((candidate / "node_modules/@deepseek-ai/dsh/package.json").read_text(encoding="utf-8"))["version"]
+            if actual != locked:
+                raise ValueError("HOST_RECOVERY_RAW_VERSION: " + actual + " != " + locked)
+            values["recoveryRaw"] = str(candidate)
         if "managed" in req:
             managed = self.runtime("managed", "current_archive" in req)
             values.update(managed=str(managed), managedModules=str(managed / "node_modules"), managedStorageModule=str(managed / "node_modules/@deepseek-ai/dsh-storage-json/lib/index.js"))
@@ -290,6 +305,7 @@ class Inputs:
         if self.jdk: prefixes.append(str(self.jdk / "bin"))
         env["PATH"] = os.pathsep.join(prefixes + [env.get("PATH", "")])
         if "raw" in values: env["DSHA_TEST_RUNTIME"] = values["raw"]
+        if "recoveryRaw" in values: env["DSHA_TEST_RUNTIME"] = values["recoveryRaw"]
         if "managed" in values: env["DSHA_TEST_MANAGED_RUNTIME"] = values["managed"]
         if row.get("executor")=="linux" and self.args.linux_host:
             env["LD_LIBRARY_PATH"]=str(Path(self.args.linux_host).resolve())
@@ -346,7 +362,7 @@ def main():
     parser.add_argument("--stage",choices=STAGES+("all","device"),default="fast")
     parser.add_argument("--check-manifest",action="store_true");parser.add_argument("--list",action="store_true");parser.add_argument("--only",action="append",default=[])
     parser.add_argument("--node",default=shutil.which("node") or "node");parser.add_argument("--powershell",default=shutil.which("pwsh") or "pwsh")
-    parser.add_argument("--raw");parser.add_argument("--managed");parser.add_argument("--pnpm-cli");parser.add_argument("--toolchain-root",default=os.environ.get("DSHA_TOOLCHAINS"));parser.add_argument("--jdk")
+    parser.add_argument("--raw");parser.add_argument("--recovery-raw",help="DSH install matching tools/recovery-runtime/lock.json; needed once the main runtime moves past the fixed emergency runtime");parser.add_argument("--managed");parser.add_argument("--pnpm-cli");parser.add_argument("--toolchain-root",default=os.environ.get("DSHA_TOOLCHAINS"));parser.add_argument("--jdk")
     parser.add_argument("--playwright");parser.add_argument("--browsers-path");parser.add_argument("--browser");parser.add_argument("--mobile-upstream",default=str(ROOT/"tools/mobile-plugin-upstream/lib"),help="Locked dsh-web-mobile lib (tools/mobile-plugin-upstream.lock.json); the test verifies every byte against pinned hashes")
     parser.add_argument("--linux-host");parser.add_argument("--wsl-distro",default="docker-desktop");parser.add_argument("--linux-tempdir",help="Explicit writable Linux fixture directory; no WSL repair or remount");parser.add_argument("--flavor",choices=("standard","low"),default="standard")
     parser.add_argument("--linux-native-inputs",default=str(ROOT/"app/build/audit-build156/linux-native"),help="Prepared NDK/Ubuntu sysroot receipt for the explicit WSL native handshake fixture")

@@ -17,10 +17,12 @@ for (const {before, after} of recipe.patches) {
   assert.equal(patched.split(before).length, 2);
   patched = patched.replace(before, after);
 }
+const moduleUrl = pathToFileURL(path.join(runtime, 'node_modules/@deepseek-ai/dsh-client-modules/lib/index.js')).href;
 function load(source) {
   const context = {createRequire, createHash, randomBytes, ...fs, ...path, fileURLToPath, pathToFileURL,
-    Service:class {}, URL, Buffer, Map, Set, Response, countNewlines, createComboCache};
-  return vm.runInNewContext(source.replace(/^import [^\n]*\n/gm, '').replace(/^export .*;\s*$/m, '')
+    Service:class {}, URL, Buffer, Map, Set, Response, countNewlines, createComboCache, dshaModuleUrl: moduleUrl};
+  // 0.2.1 reads its own package.json through import.meta.url, which a vm script cannot parse.
+  return vm.runInNewContext(source.replace(/^import [^\n]*\n/gm, '').replace(/^export .*;\s*$/m, '').replace(/import\.meta\.url/g, 'dshaModuleUrl')
     + '\n({buildCombo,ClientModuleRegistry,newlineCount})', context);
 }
 const before = load(original), after = load(patched);

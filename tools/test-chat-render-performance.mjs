@@ -13,12 +13,13 @@ fixture.page.on('console', message => {
     errors.push(message.text());
 });
 try {
-  await fixture.load('dsh-client-ui-chat', [], 'module.exports.audit = {ChatNodeList};');
+  // DSH 0.2.1 replaced ChatNodeList with ChatFlow (same keyed rows, store read through useChat/useSession).
+  await fixture.load('dsh-client-ui-chat', [], 'module.exports.audit = {ChatFlow};');
   const result = await fixture.page.evaluate(async () => {
     const React = auditModules.react.default || auditModules.react;
     const ReactDOM = auditModules['react-dom'].default || auditModules['react-dom'];
     const primitives = auditModules['@deepseek-ai/dsh-client-ui-primitives'];
-    const ChatNodeList = auditExports['@deepseek-ai/dsh-client-ui-chat'].audit.ChatNodeList;
+    const ChatFlow = auditExports['@deepseek-ai/dsh-client-ui-chat'].audit.ChatFlow;
     const host = document.createElement('div');
     host.style.cssText = 'height:760px;overflow:auto';
     document.body.append(host);
@@ -32,7 +33,11 @@ try {
     }
     const props = {
       entries, pendingInputs: [], nodeStore: {get: key => nodes[key]},
-      useChatGroup: () => undefined, useChatNode: key => nodes[key],
+      useChatGroup: () => undefined, useChatNode: (key, select) => select ? select(nodes[key]) : nodes[key],
+      useChat: select => select({nodes: {get: key => nodes[key]}, navigation: {items: () => []}}),
+      useSession: select => select({running: false}), useChatNodeBottom: () => false,
+      useGroupAction: () => React.useRef(null), useGroupHeaderAction: () => React.useRef(null),
+      renderFactorySlot: () => null,
       useChatNodeProcess: () => undefined, usePresentation: selector => selector({foldCompletedTurns: false}),
       useStore: selector => selector({}), actions: {setTurnProcessOpen() {}}, cwd: '',
       openFile() {}, openSkill() {}, inspectCall() {}, forkAt() {}, loadImage() {},
@@ -44,7 +49,7 @@ try {
     const samples = [];
     for (let i = 0; i < 6; i++) {
       const started = performance.now();
-      app.render(React.createElement(ChatNodeList, props));
+      app.render(React.createElement(ChatFlow, props));
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       samples.push(performance.now() - started);
       if (i < 5) { app.unmount(); host.replaceChildren(); app = ReactDOM.createRoot(host); }

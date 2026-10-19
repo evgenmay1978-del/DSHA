@@ -2,6 +2,17 @@
 
 ## 未发布 · 个人分支 evgenmay1978-del/DSHA
 
+### DSH 0.2.1-rc.2
+- 内置 `@deepseek-ai/dsh` 由 0.2.0-rc.2 升级到 **0.2.1-rc.2**（126 个官方包同步；`dsh-invariants`、`dsh-subagent-in-process-driver` 上游已不再发布，从锁文件移除；`cordis-plugin-group` 按上游 peer 固定 1.0.5）。
+- 锁文件用 `overrides` 把 `zod` 固定为 4.4.3：0.2.1 各包精确要求 4.4.3，不固定时 npm 会把最新 zod 提升到顶层并在 56 个包里各放一份私有副本（解压体积 +约 250 MB）。
+- 运行时补丁逐条在 0.2.1 源码上核对（按真实应用顺序、`before` 必须唯一命中）：83 处中 78 处原样适用；4 处随上游改名重新定锚——`guard-tools`（cordis 导入多了 `symbols`）、`plugin-manager-auto-enable`（目录安装改为显式 `selection`，手动安装仍默认启用）、`tooltip-entry`/`tooltip-interaction`（前端包改名 `index-CN7NIWNw.js`，注入代码仅做压缩变量名替换，逐字核对等价）。
+- `lexical-claim-patch.json` 退役：0.2.1 把已认领的命令渲染为 CommandChip 节点，不再有带样式的文本叶子，`splitText` 样式溢出问题没有了目标；登记于 `runtime-patches.json` 的 `retired`。
+- 会话后端直达提示（`DSHA_SESSION_DIRECT_HINTS_V1`）随上游把 tracker 改为构造注入而重新定锚，逻辑不变。
+- 工具调用身份补丁（`tool-*-patch.json`）用 `prepare-tool-call-identity.py` 在 0.2.1 锁定树上重新生成，补丁内容不变，只更新版本与源码摘要。
+- 数据兼容：`dsh-storage-json`、会话格式目录与 v0–v3 迁移器与 0.2.0-rc.2 逐字节相同，v3→v4 迁移器只是多接受版本 2 的 `external` 子代理事实；因此 `dataRead` 增加 `dsh-0.2.0-rc.2`，`dataWrite` 变为 `dsh-0.2.1-rc.2`（反向不兼容：0.2.0 不认识 `external`，回滚不能复用新数据）。
+- 内置插件 peer 依赖、React 种子证明（新前端包摘要）、`DSH_VERSION`、`versionName` 的 DSH 后缀、第三方声明（libreoffice-kit 0.1.2→0.1.5）同步更新；`runtimeId` 随之变化。
+- `dsh-runtime.bin` 在本机可重复构建（两次构建 SHA-256 相同），127.2 MB（0.2.0 为 122.7 MB）。应用包版本号、APK 文件名与发布证书未改动，留给维护者决定。
+
 - `/app/ui/dump` 观察结果升级：首行给出 app、屏幕尺寸、DPI、旋转与结构指纹 `screen=`；每个节点带稳定 `#ref`、短类名、resource-id、文字和动作标志（click/long/edit/scroll/on·off/focused/disabled/selected/password）及中心点与边界。
 - 新增 `?mode=outline`（只列可操作节点，省 token）与 `?changed_only=1`（只回与上次 dump 的差异：+新增 / -消失 / ~状态变化；结构未变只回一行 `unchanged`）。不带参数时仍返回完整清单（参数兼容）。
 - **不兼容：dump 每行文本格式已改变。** 旧格式 `[N] "文字" 可点击 中心=(x,y) 区域=l,t,r,b` → 新格式 `#N 类名 "文字" id=… [click,…] @x,y (l,t,r,b)`，首行 `窗口应用:` 改为 `app=…`。内置 `dsh-computer-use-android` 原样透传文本，不受影响；按旧格式（如 `中心=\(`）正则解析的外部脚本或技能需改为解析 `@x,y`。单节点文字截断到 160 字符，整次回复上限 12000 字符并注明省略行数。

@@ -551,7 +551,9 @@ def main():
         run('recovery-apk',[sys.executable,'-B','tools/verify-recovery-apk.py',*apks])
         run('recovery-browser-overlay',[args.node,'tools/test-recovery-browser-overlay.mjs',ROOT/'app/build/generated/recoveryAssets'])
         run('web-ui-host-fixtures',[args.node,'tools/test-web-ui-host-fixtures.mjs'])
-        run('recovery-profile-boot',[args.node,'tools/test-recovery-profile-boot.mjs'],{'DSHA_TEST_RUNTIME':str(locked_runtime)})
+        # The emergency agent runs on the fixed recovery runtime, not on the main one; once they differ,
+        # point DSHA_TEST_RECOVERY_RUNTIME at an install of tools/recovery-runtime/lock.json's DSH version.
+        run('recovery-profile-boot',[args.node,'tools/test-recovery-profile-boot.mjs'],{'DSHA_TEST_RUNTIME':os.environ.get('DSHA_TEST_RECOVERY_RUNTIME') or str(locked_runtime)})
         run('mobile-modal',[args.node,'tools/test-mobile-modal-behavior.mjs'],{'DSHA_TEST_RUNTIME':str(locked_runtime)})
         run('mobile-auth',[args.node,'tools/test-mobile-auth.mjs'])
         run('mobile-update',[args.node,'tools/test-mobile-update.mjs'])
