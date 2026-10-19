@@ -103,6 +103,8 @@ export function verifyRuntimeSession(directory,proof){
   if(JSON.stringify(canonical(entries))!==JSON.stringify(canonical(record.metadata.entries)))throw Error('TEST_FIXTURE_SESSION_METADATA_CHANGED');
   return true;
 }
+/** The DSH version pinned by tools/dsh-runtime/package.json — the single source tests compare against. */
+export function lockedDshVersion(){return json(path.join(root,'tools/dsh-runtime/package.json')).dependencies['@deepseek-ai/dsh'];}
 export function testRuntime(kind='raw', environment=kind==='raw'?'DSHA_TEST_RUNTIME':'DSHA_TEST_MANAGED_RUNTIME') {
   if(!['raw','managed'].includes(kind))throw Error('TEST_FIXTURE_KIND_INVALID');
   const expected=json(path.join(root,'tools/dsh-runtime/package.json')).dependencies['@deepseek-ai/dsh'];

@@ -1378,7 +1378,7 @@ export function classifyCommand(command, options = {}) {
   if (analysis.destructive) return { ...analysis, classification: 'DESTRUCTIVE', requiresApproval: true };
   const opaque = reason => ({ ...analysis, classification: 'OPAQUE', requiresApproval: true, unknownTargets: true, opaqueReason: reason });
   if (analysis.failed || typeof command !== 'string' || command.length > 65536) return opaque('Unclassified shell syntax or analysis budget');
-  if (options.env && Object.keys(options.env).some(key => /^(?:BASH_ENV|ENV|BASH_FUNC_|LD_PRELOAD|GIT_CONFIG)/.test(key) && options.env[key])) return opaque('Shell or command startup hooks');
+  if (options.env && Object.keys(options.env).some(key => /^(?:BASH_ENV|ENV|LD_PRELOAD)$|^(?:BASH_FUNC_|GIT_CONFIG)/.test(key) && options.env[key])) return opaque('Shell or command startup hooks');
   const safe = new Set([':', 'true', 'false', 'echo', 'printf', 'pwd', 'cat', 'head', 'tail', 'ls', 'stat', 'wc', 'rg', 'grep', 'du', 'find', 'sed', 'git', 'curl']);
   try {
     const commands = splitSimpleCommands(command, { vars: new Map(Object.entries(options.env || {})), home: options.home || '/root' });

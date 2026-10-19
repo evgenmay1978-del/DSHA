@@ -5,6 +5,9 @@ import { pathToFileURL } from 'node:url';
 import { testRuntime } from './test-runtime-fixture.mjs';
 import { classifyCommand } from '../app/src/main/assets/builtin-plugins/dsh-destructive-guard/lib/destructive.js';
 const root=path.resolve(import.meta.dirname,'..'), assets=path.join(root,'app/src/main/assets');
+// The policy reads the real process environment; host shell/git hooks (e.g. a CI or container
+// GIT_CONFIG_* set) would make every ordinary command opaque. This fixture models a clean agent shell.
+for(const key of Object.keys(process.env))if(/^(?:BASH_ENV|ENV|LD_PRELOAD)$|^(?:BASH_FUNC_|GIT_CONFIG)/.test(key))delete process.env[key];
 const raw=testRuntime('raw'), directory=fs.mkdtempSync(path.join(root,'app/build/guard172-'));
 const modules=path.join(directory,'node_modules');fs.mkdirSync(modules);
 const patches=['guard-tools-patch.json','guard-bash-patch.json','guard-fs-patch.json','guard-editor-patch.json'].map(name=>JSON.parse(fs.readFileSync(path.join(assets,name),'utf8')));
@@ -74,7 +77,7 @@ const fsTools=await import(pathToFileURL(path.join(modules,'@deepseek-ai/dsh-too
 const editor=await import(pathToFileURL(path.join(modules,'@deepseek-ai/dsh-tool-str-replace-editor/lib/index.js')));
 for(const outcome of ['allowed-once','rejected','cancelled','unavailable']){
  const ctx=new Context();ctx.provide('systemPrompt',{tools(){},context(){},getContextOrder(){return 10;},getSectionOrder(){return 10;},section(){}});const tools=new ToolRuntime(ctx);new ApprovalService(ctx,{policy:'ask'});new LocalFileSystem(ctx,{cwd:directory,diffBasisMaxBytes:1048576});
- fsTools.apply(ctx,{readLimit:2000,readMaxLineLength:2000,readMaxBytes:1048576,readStreamMinSize:1048576});editor.apply(ctx,{maxOutputChars:16000,description:'temporary editor'});
+ ctx.provide('workingDirectory',{async ensure(agent){return agent.session.header.cwd;}});fsTools.apply(ctx,{read:true,readImage:true,write:true,edit:true,readLimit:2000,readMaxLineLength:2000,readMaxBytes:1048576,readStreamMinSize:1048576});editor.apply(ctx,{maxOutputChars:16000,description:'temporary editor'});
  const session={header:{cwd:directory},seq:1,eventAt(){return {type:'turn/start',data:{}}},append(){}};let asks=0;ctx.on('approval/request',async()=>{asks++;return outcome;});
  const call=(name,args)=>tools.execute({name,arguments:args,callId:'fs-'+cases++,agent:{ctx,session},signal:new AbortController().signal});
  const existing=path.join(directory,'file-'+outcome);fs.writeFileSync(existing,'original');
@@ -89,14 +92,14 @@ for(const outcome of ['allowed-once','rejected']){
  const ctx=new Context();ctx.provide('systemPrompt',{tools(){},context(){},getContextOrder(){return 10;},getSectionOrder(){return 10;},section(){}});new ToolRuntime(ctx);new ApprovalService(ctx,{policy:'ask'});
  let collects=0,bodies=0,asks=0;ctx.provide('shellEnv',{collect(){collects++;return {DSH_GUARD_FIXTURE:'frozen'};}});
  ctx.provide('shell',{resolve(request){assert.equal(request.command,'python -c "opaque()"');assert.equal(request.workdir,'/root/work');assert.deepEqual(request.dshEnv,{DSH_GUARD_FIXTURE:'frozen'});return request;},async execute(){bodies++;return {result:async()=>({exitCode:0,signal:null,timedOut:false,aborted:false,timeoutMs:30000,stdout:{text:'',truncated:false},stderr:{text:'',truncated:false}})}}});
- actualBash.apply(ctx,{enableRunInBackground:false,promoteOnTimeout:false});ctx.on('approval/request',async()=>{asks++;return outcome;});
+ ctx.provide('workingDirectory',{async ensure(agent){return agent.session.header.cwd;}});actualBash.apply(ctx,{enableRunInBackground:false,promoteOnTimeout:false});ctx.on('approval/request',async()=>{asks++;return outcome;});
  const session={header:{cwd:'/root/work'},seq:1,eventAt(){return {type:'turn/start',data:{}}},append(){}};
  const result=await ctx.tools.execute({name:'bash',arguments:{command:'python -c "opaque()"',description:'counter-only opaque fixture'},callId:'actual-bash-'+cases++,agent:{ctx,session},signal:new AbortController().signal});
  assert.equal(bodies,outcome==='allowed-once'?1:0,JSON.stringify(result));assert.equal(asks,1);assert.equal(collects,1);await ctx.fiber.dispose();
 }
 // Invoke the real run_code transport's bindings through its real scheduler; language runtime is a memory seam.
 for(const outcome of ['allowed-once','rejected','cancelled','unavailable']){
- const ctx=new Context();ctx.provide('systemPrompt',{tools(){},context(){},getContextOrder(){return 10;},getSectionOrder(){return 10;},section(){}});ctx.provide('shellEnv',{collect(){return {};}});new ApprovalService(ctx,{policy:'ask'});new ToolRuntime(ctx,{mode:'ptc'});
+ const ctx=new Context();ctx.provide('systemPrompt',{tools(){},context(){},getContextOrder(){return 10;},getSectionOrder(){return 10;},section(){}});ctx.provide('shellEnv',{collect(){return {};}});new ApprovalService(ctx,{policy:'ask'});ctx.provide('workingDirectory',{async ensure(agent){return agent.session.header.cwd;}});new ToolRuntime(ctx,{mode:'ptc'});
  let bodies=0,asks=0;ctx.tools.register({name:'bash',description:'counter',parameters:{},output:{schema:{type:'object'},render:()=>[]},execute(args,exec){preparedEnvironment(exec);bodies++;return {};}});
  ctx.provide('ptcRuntime',{language:'typescript',resolve(request){return request;},async run(request){try{await request.bindings[0].functions.bash({command:'python -c "opaque()"'});return {logs:[],value:{}};}catch(error){return {logs:[],error:{kind:'exception',message:error.message}};}}});
  const events=[{type:'turn/start',data:{}}],session={header:{cwd:'/root/work'},get seq(){return events.length;},eventAt(i){return events[i]},append(type,data){events.push({type,data});}};
@@ -106,7 +109,7 @@ for(const outcome of ['allowed-once','rejected','cancelled','unavailable']){
 }
 // A file changed during approval must remain the other writer's bytes, not the approved replacement.
 for(const name of ['write','edit','str_replace_editor']){
- const ctx=new Context();ctx.provide('systemPrompt',{tools(){},context(){},getContextOrder(){return 10;},getSectionOrder(){return 10;},section(){}});new ToolRuntime(ctx);new ApprovalService(ctx,{policy:'ask'});new LocalFileSystem(ctx,{cwd:directory,diffBasisMaxBytes:1048576});fsTools.apply(ctx,{readLimit:2000,readMaxLineLength:2000,readMaxBytes:1048576,readStreamMinSize:1048576});editor.apply(ctx,{});
+ const ctx=new Context();ctx.provide('systemPrompt',{tools(){},context(){},getContextOrder(){return 10;},getSectionOrder(){return 10;},section(){}});new ToolRuntime(ctx);new ApprovalService(ctx,{policy:'ask'});new LocalFileSystem(ctx,{cwd:directory,diffBasisMaxBytes:1048576});ctx.provide('workingDirectory',{async ensure(agent){return agent.session.header.cwd;}});fsTools.apply(ctx,{read:true,readImage:true,write:true,edit:true,readLimit:2000,readMaxLineLength:2000,readMaxBytes:1048576,readStreamMinSize:1048576});editor.apply(ctx,{});
  const file=path.join(directory,'race-'+name);fs.writeFileSync(file,'original');let asks=0;ctx.on('approval/request',async()=>{asks++;fs.writeFileSync(file,'concurrent-writer');return 'allowed-once';});
  const session={header:{cwd:directory},seq:1,eventAt(){return {type:'turn/start',data:{}}},append(){}};
  const args=name==='write'?{file_path:file,content:'replacement'}:name==='edit'?{file_path:file,old_string:'original',new_string:'replacement'}:{command:'insert',path:file,insert_line:0,new_str:'replacement'};
