@@ -61,6 +61,7 @@ def accept(temporary, target, expected, label):
     if actual != expected:
         temporary.unlink()
         raise ValueError(f'APK_ASSET_DIGEST: {label} is {actual}, repository pins {expected}')
+    temporary.chmod(0o644)  # NamedTemporaryFile creates 0600; keep imported assets world-readable
     temporary.replace(target)
     print('accepted', label, actual)
 

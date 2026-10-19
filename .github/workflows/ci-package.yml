@@ -41,6 +41,17 @@ jobs:
           buildtools=$(python3 tools/ci-toolchain.py --field buildTools)
           ndk=$(python3 tools/ci-toolchain.py --field ndk)
           bash tools/ci-sdkmanager.sh "platforms;$platform" "build-tools;$buildtools" "ndk;$ndk"
+      - name: Generated assets and checked-in contracts
+        # Same generation/checks as ci-fast: pc-migration/node_modules is generated from the lock
+        # and is a runtime-descriptor input, so the descriptor cannot be checked without it.
+        run: |
+          python3 tools/pc-migration/prepare-assets.py --output app/src/main/assets
+          python3 tools/prepare-destructive-policy.py --check
+          python3 tools/prepare-runtime-tools.py --check
+          python3 tools/generate-builtin-plugins.py --verify
+          python3 tools/generate-credential-paths.py --check
+          python3 tools/prepare-semver-reference.py
+          python3 tools/bxroot/build.py --check
       - name: Full descriptor bytes, notices and native reproducibility
         run: |
           ndk=$(python3 tools/ci-toolchain.py --field ndk)
