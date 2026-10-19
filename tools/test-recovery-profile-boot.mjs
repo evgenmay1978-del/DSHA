@@ -9,7 +9,7 @@ import path from 'node:path';
 import { zstdDecompressSync } from 'node:zlib';
 
 const root=path.resolve(import.meta.dirname,'..');
-const expectedDsh=JSON.parse(await readFile(path.join(root,'tools/dsh-runtime/package.json'),'utf8')).dependencies['@deepseek-ai/dsh'];
+const expectedDsh=JSON.parse(await readFile(path.join(root,'tools/recovery-runtime/lock.json'),'utf8')).dshVersion;
 const fixture=JSON.parse(await readFile(path.join(root,'app/build/test-runtimes/current.json'),'utf8'));
 const runtime=path.resolve(process.env.DSHA_TEST_RUNTIME||fixture.raw);
 const actual=JSON.parse(await readFile(path.join(runtime,'node_modules/@deepseek-ai/dsh/package.json'),'utf8'));

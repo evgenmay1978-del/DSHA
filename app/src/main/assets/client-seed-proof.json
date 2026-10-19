@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "dshVersion": "0.2.0-rc.2",
+  "dshVersion": "0.2.1-rc.2",
   "frontendPackage": "@deepseek-ai/dsh-web-frontend",
-  "bundle": "dist/assets/index-5SrrfWpU.js",
-  "bundleSha256": "af3ff948cf3f132edbddebea93e2f9f02233b390a94bd4c9842182300be811bb",
+  "bundle": "dist/assets/index-CN7NIWNw.js",
+  "bundleSha256": "4bc914bfbb6adbdd63953a29f63835eb7127defd2a973149d64cdab489f1a9a5",
   "seeds": {
     "react": "18.3.1",
     "react/jsx-runtime": "18.3.1",

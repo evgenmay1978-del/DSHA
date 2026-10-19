@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "dshVersion": "0.2.0-rc.2",
+  "dshVersion": "0.2.1-rc.2",
   "active": [
     {
       "asset": "composer-enter-patch.json",
@@ -124,6 +124,10 @@
     {
       "asset": "web-integration/tooltip-patch.json",
       "reason": "Old 0.1.5 component replacement preserved as history. Current rc2 interaction/entry recipes retain the upstream Tooltip and add dismissal only."
+    },
+    {
+      "asset": "lexical-claim-patch.json",
+      "reason": "DSH 0.2.1 renders the claimed command as a CommandChip node instead of a styled text leaf; the splitText style-overflow guard has no target."
     }
   ]
 }

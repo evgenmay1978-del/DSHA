@@ -28,7 +28,7 @@ DSHA 重构骨架。本文让你不扫全库就能上手 —— 读它之前先�
 ## 一句话
 
 APK 用 bxroot/proot 把完整 Ubuntu rootfs 搬进 app 私有目录，在里面跑 Node 24 +
-pnpm + `@deepseek-ai/dsh`（**0.2.0-rc.2**）的 Web UI（默认动态端口，手动模式可指定 `3080`）。原生层是纯 Java 17、
+pnpm + `@deepseek-ai/dsh`（**0.2.1-rc.2**）的 Web UI（默认动态端口，手动模式可指定 `3080`）。原生层是纯 Java 17、
 Material3、单 Gradle 模块 `:app`。
 
 ## 技术约束（围绕这些设计）

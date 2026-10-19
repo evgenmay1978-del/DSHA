@@ -5,7 +5,7 @@ import argparse, hashlib, json, os, re, shutil, stat, tempfile, time, traceback,
 from pathlib import Path
 
 # Dependency version for converted preset candidates, not a data-format claim.
-VERSION = '0.2.0-rc.2'
+VERSION = '0.2.1-rc.2'
 # Stable asset marker: settings.yaml.imported is a retryable input after a
 # pending section result; it never authorizes a false committed receipt.
 RESTORED_SETTINGS_IMPORTED_FOR_RETRY = True

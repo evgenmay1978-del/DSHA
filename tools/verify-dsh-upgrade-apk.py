@@ -117,7 +117,6 @@ def verify(path):
                 b'DSHA_DEEPSEEK_MESSAGES_PROJECTED_TOOL_CALL_V1',
                 b'if (block.type === "tool-call") return [dshaMessagesProjectedToolCall(block)];',
             ),
-            PREFIX + '/node_modules/@deepseek-ai/dsh-client-ui-conversation/lib/client.js': b'DSHA_CLAIM_DECOR_OVERFLOW_STYLE_V1',
             PREFIX + '/node_modules/dsha-client-combo-cache/index.js': b'createComboCache',
         }
         # 新增预览、文件交付和反馈模块必须与锁定官方包逐字节一致，不能被旧适配覆盖。

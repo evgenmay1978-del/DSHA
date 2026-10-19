@@ -1637,7 +1637,6 @@
     "dsha-deepseek-messages-compat.js",
     "glibc-python.tar.gz",
     "language-patch.json",
-    "lexical-claim-patch.json",
     "office-fonts-patch.json",
     "offline-rootfs.bin",
     "offline-rootfs.version",

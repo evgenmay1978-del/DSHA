@@ -163,14 +163,6 @@ def main() -> None:
         },
     )
     run_bound(
-        "Lexical claim 装饰与运行时归档兼容",
-        [node, str(ROOT / "tools/test-lexical-claim-compat.mjs")],
-        {
-            "DSHA_TEST_RUNTIME": str(args.raw_runtime.resolve()),
-            "DSHA_RUNTIME_ARCHIVE": str((ROOT / "app/src/main/assets/dsh-runtime.bin").resolve()),
-        },
-    )
-    run_bound(
         "Conversation target withdrawal hidden fallback",
         [node, str(ROOT / "tools/test-conversation-materialized.mjs")],
         {

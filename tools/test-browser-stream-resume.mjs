@@ -1,6 +1,6 @@
 // Execute the locked rc2 Connection, WebSocket mux and snapshot consumer. A
 // background-dead socket stays OPEN; foreground resumes subscriptions only.
-import {readFileSync} from 'node:fs';
+import {existsSync,readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,8 +8,13 @@ import {randomUUID,webcrypto} from 'node:crypto';
 import {testRuntime} from './test-runtime-fixture.mjs';
 
 const runtime = testRuntime('raw');
-const connectionSource = readFileSync(runtime+'/node_modules/@deepseek-ai/dsh-client-connection/lib/client.js','utf8');
-const gatewaySource = readFileSync(runtime+'/node_modules/@deepseek-ai/dsh-api-gateway/lib/client.js','utf8');
+// 0.2.1 splits some client bundles into client.browser.js / client.node.js (package "./client" export).
+const browserClient = name => {
+  const base = runtime+'/node_modules/@deepseek-ai/'+name+'/lib/';
+  return readFileSync(existsSync(base+'client.browser.js') ? base+'client.browser.js' : base+'client.js','utf8');
+};
+const connectionSource = browserClient('dsh-client-connection');
+const gatewaySource = browserClient('dsh-api-gateway');
 const integrationSource = readFileSync('app/src/main/assets/app-integration/client.js','utf8');
 const wait = ms => new Promise(resolve => setTimeout(resolve,ms));
 async function until(check) {
