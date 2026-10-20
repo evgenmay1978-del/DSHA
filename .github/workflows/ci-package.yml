@@ -61,8 +61,24 @@ jobs:
           python3 tools/native-session/build.py --ndk "$ANDROID_HOME/ndk/$ndk" --check
       - name: Current verified host runtime fixture
         run: python3 tools/prepare-test-runtime.py
+      # recovery-profile-boot drives the emergency workbench in a real Chromium on the pinned
+      # emergency runtime; same installs as ci-runtime.
+      - name: Install the emergency runtime version for recovery tests
+        run: |
+          mkdir -p "$RUNNER_TEMP/recovery"
+          cp tools/recovery-runtime/test-install/package.json tools/recovery-runtime/test-install/package-lock.json "$RUNNER_TEMP/recovery/"
+          npm ci --prefix "$RUNNER_TEMP/recovery" --ignore-scripts --no-audit --no-fund --loglevel=error
+      - name: Browser for recovery profile checks
+        run: |
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/pw-browsers"
+          npm install --prefix "$RUNNER_TEMP/pw" playwright@1.56.1 --no-audit --no-fund --loglevel=error
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
       - name: Complete unit, lint, assets and package checks without signing secrets
-        run: python3 tools/verify-stability.py --stage package --java-home "$JAVA_HOME" --sdk "$ANDROID_HOME"
+        run: |
+          export DSHA_PLAYWRIGHT="$RUNNER_TEMP/pw/node_modules/playwright"
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/pw-browsers"
+          export DSHA_TEST_RECOVERY_RUNTIME="$RUNNER_TEMP/recovery"
+          python3 tools/verify-stability.py --stage package --java-home "$JAVA_HOME" --sdk "$ANDROID_HOME"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
