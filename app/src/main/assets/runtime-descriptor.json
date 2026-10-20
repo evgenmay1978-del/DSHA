@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "runtimeId": "75cfbe96375cf4b7287b633c15b95bf9794259690ca7b794a5f19a87869f7c03",
+  "runtimeId": "cb36a4905fe3e5789ab1df888c1b3e547600c9c0580460204a7b04cc7fd32835",
   "baseVersion": "10",
   "dshVersion": "0.2.1-rc.2",
   "launcherContract": "DSHA_ARM64_V2",
@@ -203,7 +203,7 @@
     "runtime/AndroidTrustedAssetFileSystem.java": "e00efc057c767693cbd6a8d49580a70b4945e7ae677f771711fe02a1a6625d6f",
     "runtime/ArchiveFileBoundary.java": "92902df998f7cbf822f0ac11f1f33007a2d30fcd1af052f86013013df0a8e872",
     "runtime/BasicToolsInstaller.java": "c9fb7493d7db8f9c5d84f42ec8bb08fec6d1ad4372f149b3170acae096d839f7",
-    "runtime/BoundedGuestBootRecovery.java": "b648907a74e1e71a6d2f2d976e8cb9dfbdd19480425153a909ebd240cf4c7268",
+    "runtime/BoundedGuestBootRecovery.java": "e93e65a268e07b3dcbf73520f35b8bf4286c0cce141e83280b35a1aa8837761a",
     "runtime/BoundedGuestLifetime.java": "2ff99d961b010f31959df45ebf2c68c779672d84035ee4a578d770107074d431",
     "runtime/BoundedGuestSessions.java": "927a877a66acac803242a8114c9cae291c331600adb4029ff77967aeceabe806",
     "runtime/BxrootPrivateRoot.java": "1ef7b828f8abc8cca0279e00cfca4531269289abfa8680dbada532dfbbe857ce",

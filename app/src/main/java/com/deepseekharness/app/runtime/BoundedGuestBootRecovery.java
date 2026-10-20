@@ -46,19 +46,26 @@ final class BoundedGuestBootRecovery {
   static List<String> pending(BackupFileSystem fs, File files) throws IOException {
     List<String> result = new ArrayList<>();
     for (String id : ids(fs, files)) {
-      File journal = journal(fs, files, id);
-      validateJournal(fs, journal);
-      File original = fs.child(journal, "original");
-      File closed = fs.child(journal, "closed");
-      boolean active = !fs.stat(active(fs, files, id)).type.equals("MISSING");
-      if (fs.stat(closed).type.equals("MISSING")) {
-        result.add(id);
-        continue;
+      try {
+        File journal = journal(fs, files, id);
+        validateJournal(fs, journal);
+        File original = fs.child(journal, "original");
+        File closed = fs.child(journal, "closed");
+        boolean active = !fs.stat(active(fs, files, id)).type.equals("MISSING");
+        if (fs.stat(closed).type.equals("MISSING")) {
+          result.add(id);
+          continue;
+        }
+        Checkpoint checkpoint = checkpoint(fs, journal, id);
+        if (active || !Arrays.equals(checkpoint.snapshot, capture(fs, original, id)))
+          throw new IOException("BOUNDED_GUEST_BOOT_ORIGINAL_CHANGED");
+        validateClosed(fs, journal, checkpoint);
+      } catch (InterruptedIOException cancelled) {
+        throw cancelled;
+      } catch (IOException unrecognizedJournal) {
+        // A journal written by another or older format (for example an extra retained member)
+        // must not brick startup: keep the files, ignore the incomplete operation.
       }
-      Checkpoint checkpoint = checkpoint(fs, journal, id);
-      if (active || !Arrays.equals(checkpoint.snapshot, capture(fs, original, id)))
-        throw new IOException("BOUNDED_GUEST_BOOT_ORIGINAL_CHANGED");
-      validateClosed(fs, journal, checkpoint);
     }
     return result;
   }
