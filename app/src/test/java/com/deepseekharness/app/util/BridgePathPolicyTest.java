@@ -111,6 +111,36 @@ public class BridgePathPolicyTest {
     assertTrue(BridgePathPolicy.deniedGuestView("", null));
   }
 
+  /**
+   * 读取判据（/app/readfile）与导出判据不同：公共存储和 /proc 必须能读。
+   *
+   * <p>回归背景：readfile 曾复用 deniedGuestView，导致 /sdcard/Download/*.sh 和
+   * /proc/self/status 一律 FORBIDDEN —— 真机审计脚本
+   * {@code tools/device-policy-device-audit.py} 因此失败。
+   */
+  @Test
+  public void readPolicyAllowsPublicStorageButNotAppData() {
+    String rootfs = "/data/data/com.dsh.client/files/linux/ubuntu";
+    // rootfs 之外：公共存储、/proc、/data/local/tmp 放行（实际权限仍由 Android 决定）
+    assertFalse(BridgePathPolicy.readDenied("/sdcard/Download/x.pdf", rootfs));
+    assertFalse(BridgePathPolicy.readDenied("/storage/emulated/0/Download/x.pdf", rootfs));
+    assertFalse(BridgePathPolicy.readDenied("/proc/self/status", rootfs));
+    assertFalse(BridgePathPolicy.readDenied("/data/local/tmp/x.log", rootfs));
+    // rootfs 内：正常产物放行，凭据拒绝
+    assertFalse(BridgePathPolicy.readDenied(rootfs + "/root/report.md", rootfs));
+    assertTrue(BridgePathPolicy.readDenied(rootfs + "/root/.dsh/.bridge_token", rootfs));
+    assertTrue(BridgePathPolicy.readDenied(rootfs + "/root/.ssh/id_rsa", rootfs));
+    // App 私有数据仍然拒绝
+    assertTrue(BridgePathPolicy.readDenied("/data/data/com.dsh.client/shared_prefs/x.xml", rootfs));
+    assertTrue(BridgePathPolicy.readDenied("/data/user/0/com.dsh.client/databases/x.db", rootfs));
+    // 空值拒绝
+    assertTrue(BridgePathPolicy.readDenied(null, rootfs));
+    assertTrue(BridgePathPolicy.readDenied("", rootfs));
+    // rootfs 为 null 时按通用宿主判据：公共存储放行，App 私有数据仍拒绝
+    assertFalse(BridgePathPolicy.readDenied("/sdcard/x.txt", null));
+    assertTrue(BridgePathPolicy.readDenied("/data/data/com.dsh.client/x", null));
+  }
+
   /** normalize 的边界。 */
   @Test
   public void normalizesPaths() {

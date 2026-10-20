@@ -1727,14 +1727,27 @@ public final class HttpShellService {
       // 再经 /app/export 就能落到公共目录（真机实测过这条链路）。
       if (com.deepseekharness.app.util.BridgePathPolicy.denied(p))
         return "FORBIDDEN: " + com.deepseekharness.app.util.BridgePathPolicy.reason();
+      // 允许传 rootfs 内的 guest 路径（/root/... → 映射到 App 私有目录），与 /app/export 一致。
+      // 否则 /root 在 App 进程里不存在，读取只能返回 NOT_FOUND。
+      if (!f.exists()) {
+        try {
+          HarnessController hc = HarnessController.get(ctx);
+          java.io.File guess =
+              new java.io.File(
+                  hc.getProot().getRootfsDir(), p.startsWith("/") ? p.substring(1) : p);
+          if (guess.exists()) f = guess;
+        } catch (Throwable ignored) {
+        }
+      }
       String canon;
       try {
         canon = f.getCanonicalPath();
       } catch (Exception e) {
         return com.deepseekharness.app.util.UiText.format("FORBIDDEN: 路径无法解析（%s）", p);
       }
-      // 复核 canonical：软链接不能成为读凭据的跳板。
-      if (exportDeniedByCanonical(f))
+      // 复核 canonical：软链接不能成为读凭据的跳板。读取允许 rootfs 之外的公共存储与 /proc，
+      // 因此用 readDeniedByCanonical，而不是导出用的严格判据。
+      if (readDeniedByCanonical(f))
         return "FORBIDDEN: " + com.deepseekharness.app.util.BridgePathPolicy.reason();
       // canon 之后用于目录遍历的越界复核，避免同一路径被解析两遍产生竞态。
       if (canon == null || canon.isEmpty())
@@ -1754,7 +1767,7 @@ public final class HttpShellService {
           }
           // 列出上层目录时也不能暴露凭据区条目（名字本身就是情报）。
           if (com.deepseekharness.app.util.BridgePathPolicy.denied(child.getPath())
-              || exportDeniedByCanonical(child)) continue;
+              || readDeniedByCanonical(child)) continue;
           listing
               .append(fs.stat(child).type.equals("DIRECTORY") ? "d\t" : "f\t")
               .append(child.getName())
@@ -2213,6 +2226,24 @@ public final class HttpShellService {
       return com.deepseekharness.app.util.BridgePathPolicy.deniedGuestView(canonical, rootfs);
     } catch (Throwable unreadable) {
       // 取不到 canonical（异常路径）按拒绝处理，不放过。
+      return true;
+    }
+  }
+
+  /**
+   * 读取专用的 canonical 复核：rootfs 之外允许公共存储与 {@code /proc}，
+   * 只拒绝 App 私有数据。导出继续用 {@link #exportDeniedByCanonical}（更严格）。
+   */
+  private boolean readDeniedByCanonical(java.io.File file) {
+    try {
+      String canonical = file.getCanonicalPath();
+      String rootfs = null;
+      try {
+        rootfs = HarnessController.get(ctx).getProot().getRootfsDir().getCanonicalPath();
+      } catch (Throwable ignored) {
+      }
+      return com.deepseekharness.app.util.BridgePathPolicy.readDenied(canonical, rootfs);
+    } catch (Throwable unreadable) {
       return true;
     }
   }
