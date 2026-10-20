@@ -65,7 +65,43 @@ def scan(modules_root):
                 rows.append((path.name, index, 'ALREADY_PATCHED', module))
             else:
                 rows.append((path.name, index, f'ANCHOR_FOUND_{count}_TIMES', module))
-    return rows
+    return rows + java_owned(modules_root)
+
+
+def _java_string(source, name):
+    match = re.search(r'\b' + name + r'\s*=\s*"((?:[^"\\]|\\.)*)";', source)
+    if not match:
+        raise ValueError('JAVA_ANCHOR_SOURCE: ' + name)
+    return json.loads('"' + match[1] + '"')
+
+
+def java_owned(modules_root):
+    """Anchors the app applies itself (RuntimeTools): the PDF recipe and the LAN settings patch.
+
+    Neither is a `patches` list, so the loop above never saw them; a core upgrade that moved
+    one only failed on the phone's first start (LAN_SETTINGS_PATCH_MISMATCH on 0.2.1).
+    """
+    rows = []
+    pdf = json.loads((ASSETS / 'pdf-compat-patch.json').read_text(encoding='utf-8'))
+    for key, module in (('mainBefore', pdf['module']), ('workerBefore', pdf['module']),
+                        ('resourceBefore', pdf['resourceModule'])):
+        target = Path(modules_root) / module
+        if not target.is_file():
+            rows.append(('pdf-compat-patch.json', key, 'MODULE_MISSING', module))
+            continue
+        count = target.read_text(encoding='utf-8', errors='replace').count(pdf[key])
+        rows.append(('pdf-compat-patch.json', key, 'OK' if count == 1 else f'ANCHOR_FOUND_{count}_TIMES', module))
+    java = (ROOT / 'app/src/main/java/com/deepseekharness/app/util/LanSettingsPatch.java').read_text(encoding='utf-8')
+    before, after, host_only = (_java_string(java, name) for name in ('BEFORE', 'AFTER', 'HOST_ONLY_MIRROR'))
+    module = '@deepseek-ai/dsh-client-ui-settings/lib/client.js'
+    target = Path(modules_root) / module
+    if not target.is_file():
+        return rows + [('LanSettingsPatch.java', 0, 'MODULE_MISSING', module)]
+    text = target.read_text(encoding='utf-8', errors='replace')
+    legacy = text.count(before) == 1 or (text.count(after) == 1 and before not in text)
+    modern = before not in text and after not in text and text.count(host_only) == 1 \
+        and 'persistence === "memory"' not in text and 'isLoopback ? "host"' not in text
+    return rows + [('LanSettingsPatch.java', 0, 'OK' if legacy or modern else 'UNKNOWN_SETTINGS_SHAPE', module)]
 
 
 def stamp(version):

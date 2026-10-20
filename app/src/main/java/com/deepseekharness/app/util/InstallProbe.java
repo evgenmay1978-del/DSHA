@@ -94,8 +94,7 @@ public final class InstallProbe {
             "test -f "
                 + ShellQuote.arg(SETTINGS)
                 + " || { echo '设置模块缺失'; exit 1; }; if grep -Fq "
-                + ShellQuote.arg(
-                    "const persistence = ctx.remote.$host.isLoopback ? \"host\" : \"memory\";")
+                + ShellQuote.arg(LanSettingsPatch.BEFORE)
                 + " "
                 + ShellQuote.arg(SETTINGS)
                 + "; then echo '局域网设置补丁缺失'; exit 1; fi"));
