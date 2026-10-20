@@ -22,7 +22,7 @@ public final class Constants {
   public static final int DSH_WEB_PORT = 3080;
 
   /** App 能力桥（agent 调 Android）端口 */
-  public static final int SHELL_BRIDGE_PORT = 3090;
+  public static final int SHELL_BRIDGE_PORT = 3190;
 
   /** 局域网反向代理端口 */
   public static final int LAN_BRIDGE_PORT = 3081;
@@ -31,7 +31,7 @@ public final class Constants {
   public static final int ADB_DEFAULT_CONNECT_PORT = 5555;
 
   // ================= 通知 ID（全局唯一，禁止重复） =================
-  /** 危险命令确认通知（3090 桥） */
+  /** 危险命令确认通知（3190 桥） */
   public static final int NOTIF_SHELL_CONFIRM = NotificationIds.SHELL_CONFIRM;
 
   // ================= dsh 版本（采用最新 @deepseek-ai/dsh） =================

@@ -242,7 +242,7 @@
     "pc-migration/package-lock.json": "836a8f4c11a8f7a96ff0724386f64f6c0158a9385f936d4763e6f3bf2685dda6",
     "pc-migration/package.json": "b6f59dce1120d084cd96b37167c981784d723569d8c3c79e4065ba54d48554fa",
     "pc-migration/portable-core.mjs": "8faa0282741f7c1a998ed2d93d8c16b4e0df5adac48a43d334e39e3a3ddd6df2",
-    "pc-migration/portable-plan.json": "0550da41cb5d2eb69b6a79da466ea50137dcdb5cbbab8515b711ea7dd7449182",
+    "pc-migration/portable-plan.json": "c2545caef9f11bcab510707b4ab36c3ab112155c6e9f2afe8d66e387d2001a09",
     "pc-migration/portable-yaml.mjs": "8d752ced18b221bf25811261f50b640baab5688fcdcb45daf342304f75bb3d79"
   }
 }

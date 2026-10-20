@@ -23,7 +23,7 @@ public class WebPortPolicyTest {
         0,
         WebPortPolicy.choose(
                 0,
-                3090,
+                3190,
                 port -> {
                   throw new AssertionError();
                 })
@@ -53,7 +53,7 @@ public class WebPortPolicyTest {
     assertEquals(
         0,
         WebPortPolicy.choose(
-                3090,
+                3190,
                 3081,
                 port -> {
                   throw new AssertionError("reserved port probed");
@@ -95,7 +95,7 @@ public class WebPortPolicyTest {
         WebPortPolicy.authentication(
             "dsh web: " + url + "\ndsh web: http://127.0.0.1:45679/?token=" + token, 0));
     assertNull(WebPortPolicy.authentication("dsh web: http://localhost:45678/?token=" + token, 0));
-    assertNull(WebPortPolicy.authentication("dsh web: http://127.0.0.1:3090/?token=" + token, 0));
+    assertNull(WebPortPolicy.authentication("dsh web: http://127.0.0.1:3190/?token=" + token, 0));
     assertNull(WebPortPolicy.authentication("dsh web: " + url, 3080));
     assertNull(WebPortPolicy.authentication("plugin example " + url, 45678));
     assertEquals(url, WebPortPolicy.authentication("dsh web: " + url, 45678));
@@ -107,7 +107,7 @@ public class WebPortPolicyTest {
     String error =
         "@deepseek-ai/dsh-host-webserver: listen EADDRINUSE: address already in use 127.0.0.1:3080";
     assertEquals(3080, WebPortPolicy.conflictPort(error));
-    assertEquals(-1, WebPortPolicy.conflictPort("a-plugin: listen EADDRINUSE 127.0.0.1:3090"));
+    assertEquals(-1, WebPortPolicy.conflictPort("a-plugin: listen EADDRINUSE 127.0.0.1:3190"));
     assertEquals(
         -1,
         WebPortPolicy.conflictPort("@deepseek-ai/dsh-host-webserver: Cannot find module example"));

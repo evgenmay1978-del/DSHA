@@ -74,7 +74,7 @@
     },
     {
       "path": ".bridge_token / .bridge_headers / .bridge_status",
-      "why": "3090 桥的本机共享凭据；泄露即等于交出设备控制权"
+      "why": "3190 桥的本机共享凭据；泄露即等于交出设备控制权"
     },
     {
       "path": ".anonymous-user-id",

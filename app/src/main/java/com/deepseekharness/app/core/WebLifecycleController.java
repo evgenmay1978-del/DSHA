@@ -414,7 +414,7 @@ final class WebLifecycleController {
               || "proot".equals(runtimeName) && "bxroot".equals(config.getContainerRuntime());
       run.launcher = p;
       setWebStage(generation, com.deepseekharness.app.util.UiText.text("等待鉴权链接"));
-      // 3090 桥就绪：agent 在容器里调设备能力（/exec /confirm /status）走这条通道。
+      // 3190 桥就绪：agent 在容器里调设备能力（/exec /confirm /status）走这条通道。
       // 本代 Web 持有自己的需求；其它服务退出不能关闭仍在使用的桥。
       try {
         processes.acquireBridge(run);
@@ -422,7 +422,7 @@ final class WebLifecycleController {
         Log.w(
             "DSHA",
             com.deepseekharness.app.util.UiText.format(
-                "3090 桥启动失败：%s",
+                "3190 桥启动失败：%s",
                 com.deepseekharness.app.util.SensitiveData.redact(String.valueOf(e))));
       }
       if (ports.listen == 0)

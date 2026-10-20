@@ -297,7 +297,7 @@ class VerifyTest(unittest.TestCase):
         # 回归：移植时会在注释里记录「原版用的是 desktopRuntime」，
         # 那是说明不是依赖；按原文匹配会误报。
         self.write('lib/index.js',
-                   "/**\n * 原版用 ctx.desktopRuntime.notifyAttention()，这里换成 3090 桥。\n */\n"
+                   "/**\n * 原版用 ctx.desktopRuntime.notifyAttention()，这里换成 3190 桥。\n */\n"
                    "export const name = 'dsh-sample'\n"
                    "// runtime.openTerminal() 同样不适用\n"
                    'export function apply(ctx) {}\n')
