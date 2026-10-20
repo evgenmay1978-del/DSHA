@@ -79,8 +79,8 @@ public class WebTransferPolicyTest {
           "file:///private",
           "content://private/key",
           "blob:http://example.com/id",
-          "blob:http://127.0.0.1:3090/id",
-          "http://127.0.0.1:3090/"
+          "blob:http://127.0.0.1:3190/id",
+          "http://127.0.0.1:3190/"
         }) assertFalse(WebPreviewPolicy.pageDownload(base, bad));
   }
 }

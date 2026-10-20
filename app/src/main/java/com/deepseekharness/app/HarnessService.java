@@ -120,7 +120,7 @@ public class HarnessService extends Service {
       stopSelf();
       return;
     }
-    // 3090 桥（agent 调设备能力）随前台服务拉起；跨实例互斥，重复启动安全
+    // 3190 桥（agent 调设备能力）随前台服务拉起；跨实例互斥，重复启动安全
     try {
       shellHttp = HttpShellService.acquire(this);
     } catch (Throwable ignored) {

@@ -163,7 +163,7 @@ public class WebProcSelTest {
   @Test
   public void portHexIsFourDigitUpperHex() {
     assertEquals("0C08", WebProcSel.portHex(3080));
-    assertEquals("0C12", WebProcSel.portHex(3090));
+    assertEquals("0C76", WebProcSel.portHex(3190));
     assertEquals("15B3", WebProcSel.portHex(5555));
   }
 

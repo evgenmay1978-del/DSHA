@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * ADB 保活服务：ADB 开关打开时后台周期探测连接，掉线自动重连。
- * 同时挂载 3090 桥（agent 调设备能力）与 Shizuku 备用通道，
+ * 同时挂载 3190 桥（agent 调设备能力）与 Shizuku 备用通道，
  * 并带网络/屏幕事件即时触发 + Doze 下 Alarm 兜底。
  */
 public class DeviceBridgeService extends Service {
@@ -166,7 +166,7 @@ public class DeviceBridgeService extends Service {
       stopSelf();
       return;
     }
-    // 3090 桥（agent 调设备能力的通道）与 Shizuku 备用通道一并拉起。
+    // 3190 桥（agent 调设备能力的通道）与 Shizuku 备用通道一并拉起。
     // 设备服务持有独立需求，不依赖与 Web 服务的启动顺序。
     try {
       retainBridge();
@@ -174,7 +174,7 @@ public class DeviceBridgeService extends Service {
       Log.w(
           "DSHA",
           com.deepseekharness.app.util.UiText.format(
-              "3090 桥启动失败: %s", SensitiveData.redact(String.valueOf(e))));
+              "3190 桥启动失败: %s", SensitiveData.redact(String.valueOf(e))));
     }
     try {
       ShizukuShell.ensureBound(this);
@@ -383,7 +383,7 @@ public class DeviceBridgeService extends Service {
 
   private void runProbe(String reason) {
     if (!running || !isAdbEnabled(this)) return;
-    // 3090 桥自愈：桥被系统回收/异常退出后自动补拉起。
+    // 3190 桥自愈：桥被系统回收/异常退出后自动补拉起。
     // 重试仍使用本服务的需求；不会创建没有释放方的匿名监听实例。
     try {
       if (!HttpShellService.isReady()) {

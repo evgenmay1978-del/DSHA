@@ -13,7 +13,7 @@ public class WebPreviewPolicyTest {
     assertTrue(
         WebPreviewPolicy.sameService("http://127.0.0.1:8088/", "http://127.0.0.1:8088/chat/123"));
     assertFalse(
-        WebPreviewPolicy.sameService("http://127.0.0.1:8088/", "http://127.0.0.1:3090/exec"));
+        WebPreviewPolicy.sameService("http://127.0.0.1:8088/", "http://127.0.0.1:3190/exec"));
   }
 
   @Test

@@ -15,7 +15,7 @@ public class ConfigInputTest {
   @Test
   public void reservedAndMalformedPortsNeverSilentlyFallback() {
     for (String value :
-        new String[] {"3081", "3090", "0", "-1", "65536", "", "x", "999999999999", "30.80"})
+        new String[] {"3081", "3190", "0", "-1", "65536", "", "x", "999999999999", "30.80"})
       assertThrows(value, IllegalArgumentException.class, () -> ConfigInput.port(value));
   }
 }
