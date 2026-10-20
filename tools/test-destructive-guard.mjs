@@ -263,6 +263,30 @@ for (const [command, why] of KNOWN_BYPASS) {
 }
 console.log(`历史绕过批准覆盖：${bypassCaught}/${KNOWN_BYPASS.length}`);
 
+console.log('== 无害的重复定向/环境变量不应要求批准 ==');
+const BENIGN_NO_APPROVAL = [
+  ['ls /data/user/0 2>&1', {}, '标准错误并入标准输出'],
+  ['cat /proc/self/environ 2>/dev/null', {}, '丢弃标准错误'],
+  ['cd /root && ls', {}, 'cd 后只读命令'],
+  ['pwd', {LD_PRELOAD: '/data/app/x/lib/arm64/libbxroot-runtime.so'}, 'bxroot 自己的 preload'],
+  ['pwd', {GIT_CONFIG_NOSYSTEM: '1'}, 'GIT_CONFIG_NOSYSTEM 不是启动钩子'],
+];
+for (const [command, env, why] of BENIGN_NO_APPROVAL) {
+  const result = classifyCommand(command, {cwd:CWD, probe, env});
+  check(!result.requiresApproval, `${why}不应要求批准：${command} ${JSON.stringify(env)}`, result.opaqueReason || result.classification);
+}
+
+console.log('== 真正的启动钩子仍必须批准 ==');
+const RISKY_HOOKS = [
+  ['pwd', {LD_PRELOAD: '/tmp/evil.so'}, '外部 preload'],
+  ['pwd', {GIT_CONFIG_GLOBAL: '/tmp/x'}, '全局 git 配置'],
+  ['pwd', {BASH_ENV: '/tmp/x.sh'}, 'BASH_ENV 脚本'],
+];
+for (const [command, env, why] of RISKY_HOOKS) {
+  check(classifyCommand(command, {cwd:CWD, probe, env}).requiresApproval, `${why}必须要求批准：${command}`);
+}
+
+
 // #region 目标清单与计数（需求：弹窗要显示"删什么、几个"）
 
 console.log('== 目标清单与计数 ==');

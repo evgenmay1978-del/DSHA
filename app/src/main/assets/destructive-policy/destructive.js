@@ -1378,8 +1378,18 @@ export function classifyCommand(command, options = {}) {
   if (analysis.destructive) return { ...analysis, classification: 'DESTRUCTIVE', requiresApproval: true };
   const opaque = reason => ({ ...analysis, classification: 'OPAQUE', requiresApproval: true, unknownTargets: true, opaqueReason: reason });
   if (analysis.failed || typeof command !== 'string' || command.length > 65536) return opaque('Unclassified shell syntax or analysis budget');
-  if (options.env && Object.keys(options.env).some(key => /^(?:BASH_ENV|ENV|LD_PRELOAD)$|^(?:BASH_FUNC_|GIT_CONFIG)/.test(key) && options.env[key])) return opaque('Shell or command startup hooks');
-  const safe = new Set([':', 'true', 'false', 'echo', 'printf', 'pwd', 'cat', 'head', 'tail', 'ls', 'stat', 'wc', 'rg', 'grep', 'du', 'find', 'sed', 'git', 'curl']);
+  // bxroot сам выставляет LD_PRELOAD на свой рантайм — это не хук, а штатная среда контейнера.
+  const runtimePreload = value => typeof value === 'string'
+    && value.split(/[:\s]+/).filter(Boolean).every(entry => /(?:^|\/)libbxroot-runtime\.so$/.test(entry));
+  const hookKey = key => /^(?:BASH_ENV|ENV)$/.test(key)
+    || /^(?:BASH_FUNC_|GIT_CONFIG_(?:GLOBAL|SYSTEM|PARAMETERS|KEY|COUNT))/.test(key);
+  if (options.env && Object.keys(options.env).some(key => {
+    const value = options.env[key];
+    if (!value) return false;
+    if (key === 'LD_PRELOAD') return !runtimePreload(value);
+    return hookKey(key);
+  })) return opaque('Shell or command startup hooks');
+  const safe = new Set([':', 'true', 'false', 'echo', 'printf', 'pwd', 'cat', 'head', 'tail', 'ls', 'stat', 'wc', 'rg', 'grep', 'du', 'find', 'sed', 'git', 'curl', 'cd']);
   try {
     const commands = splitSimpleCommands(command, { vars: new Map(Object.entries(options.env || {})), home: options.home || '/root' });
     for (const tokens of commands) {
@@ -1393,7 +1403,9 @@ export function classifyCommand(command, options = {}) {
       const args = invocation.args.map(token => String(token.value));
       if (invocation.args.some(token => token.dynamic || token.subs?.length)) return opaque('Dynamic command arguments or command substitution');
       if (tokens.some(token => token.kind === 'redirect' && (['<<','<<-','<<<'].includes(token.op) || token.target?.dynamic || token.target?.subs?.length))) return opaque('Here-document or dynamic redirect can execute shell expansions');
-      if (tokens.some(token => token.kind === 'redirect' && token.op !== '<' && !isVoidTarget(token.target?.value))) return opaque('Shell output may overwrite a file');
+      // 2>&1 / >&2 / 2>&- только дублируют дескрипторы и не могут перезаписать файл.
+      const fdDuplicate = token => token.op === '>&' && /^(?:[0-9]+|-)$/.test(String(token.target?.value ?? ''));
+      if (tokens.some(token => token.kind === 'redirect' && token.op !== '<' && !isVoidTarget(token.target?.value) && !fdDuplicate(token))) return opaque('Shell output may overwrite a file');
       const program = invocation.program;
       if (program === 'printf' && args[0] === '-v') return opaque('printf can change shell variables');
       if (program === 'sed' && !(args.length >= 2 && args[0] === '-n' && /^(?:[0-9]+(?:,[0-9]+|,\$)?)?[pq]$/.test(args[1]) && args.slice(2).every(value => !value.startsWith('-')))) return opaque('sed program may write files or execute helpers');
