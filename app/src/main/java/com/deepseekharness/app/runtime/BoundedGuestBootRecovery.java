@@ -16,6 +16,9 @@ final class BoundedGuestBootRecovery {
   private static final int LIMIT = 8192;
   private static final List<String> MEMBERS = List.of("identity", "intent", "protocol");
 
+  /** Newer retained records add this member; the canonical snapshot must accept it. */
+  private static final Set<String> OPTIONAL_MEMBERS = Set.of("retain");
+
   interface BootSource {
     String read() throws IOException;
   }
@@ -217,8 +220,13 @@ final class BoundedGuestBootRecovery {
 
   private static byte[] capture(BackupFileSystem fs, File entry, String id) throws IOException {
     BackupFileSystem.Node directory = fs.stat(entry);
-    if (!directory.type.equals("DIRECTORY")
-        || !new HashSet<>(fs.list(entry)).equals(new HashSet<>(MEMBERS)))
+    if (!directory.type.equals("DIRECTORY"))
+      throw new IOException("BOUNDED_GUEST_BOOT_INELIGIBLE_MEMBERS");
+    Set<String> names = new HashSet<>(fs.list(entry));
+    if (!names.containsAll(MEMBERS)
+        || !names.stream()
+            .filter(name -> !MEMBERS.contains(name))
+            .allMatch(OPTIONAL_MEMBERS::contains))
       throw new IOException("BOUNDED_GUEST_BOOT_INELIGIBLE_MEMBERS");
     Map<String, byte[]> values = new TreeMap<>();
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -245,6 +253,9 @@ final class BoundedGuestBootRecovery {
         || !lines[1].matches("[1-9][0-9]* [1-9][0-9]* [1-9][0-9]*")
         || !Arrays.equals(values.get("intent"), ascii(id + "\n"))
         || !Arrays.equals(values.get("protocol"), ascii("DSHA_OWNED_TREE_V2\n")))
+      throw new IOException("BOUNDED_GUEST_BOOT_RECORD_INVALID");
+    if (names.contains("retain")
+        && !Arrays.equals(fs.small(fs.child(entry, "retain"), 64), ascii("RECORDED_OWNER\n")))
       throw new IOException("BOUNDED_GUEST_BOOT_RECORD_INVALID");
     try {
       String[] fields = lines[1].split(" ");
