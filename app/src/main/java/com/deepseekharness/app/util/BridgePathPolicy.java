@@ -132,6 +132,37 @@ public final class BridgePathPolicy {
     return denied(guest);
   }
 
+  /**
+   * 读取（{@code /app/readfile}）专用的 canonical 判据。
+   *
+   * <p><b>为什么不能复用 {@link #deniedGuestView}</b>：它把「不在 rootfs 里」一律拒绝，
+   * 但读取的正当目标本来就包括 rootfs 之外的<b>公共存储</b>（{@code /sdcard/Download}）
+   * 和宿主只读文件（{@code /proc/self/status}）—— 真机审计脚本
+   * {@code tools/device-policy-device-audit.py} 就是这么用的。导出需要 stricter 的判据
+   * （产物只能来自容器或公共存储），读取不需要。
+   *
+   * <p>规则：
+   *
+   * <ul>
+   *   <li>rootfs 内 → 按 guest 视角判据（{@code /root/.dsh} 等凭据仍然拒绝）；
+   *   <li>rootfs 外 → 只拒绝 App 私有数据（{@code /data/data}、{@code /data/user}）；
+   *       公共存储、{@code /proc}、{@code /data/local/tmp} 放行，实际权限仍由 Android 决定。
+   * </ul>
+   */
+  public static boolean readDenied(String canonical, String rootfsCanonical) {
+    if (canonical == null || canonical.isEmpty()) return true;
+    String path = normalize(canonical);
+    if (CredentialPaths.deniedRelative(path)) return true;
+    if (rootfsCanonical != null && !rootfsCanonical.isEmpty()) {
+      String root = normalize(rootfsCanonical);
+      if (startsWithPath(path, root)) {
+        if (path.equals(root)) return true;
+        return denied("/" + path.substring(root.length() + 1));
+      }
+    }
+    return deniedHostPath(path, rootfsCanonical);
+  }
+
   /** 拒绝时的用户可见原因。 */
   public static String reason() {
     return UiText.text("该路径属于凭据或运行时内部状态，不允许经设备桥读取/导出；请改为导出工作产物（如 /root/report.md）");
