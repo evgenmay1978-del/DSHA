@@ -398,11 +398,7 @@ final class RuntimeTools {
       throw new IOException("LAN_SETTINGS_MODULE_PATH");
     String source = Compat.readAll(module);
     try {
-      String patched =
-          com.deepseekharness.app.util.ExactTextPatch.apply(
-              source,
-              "const persistence = ctx.remote.$host.isLoopback ? \"host\" : \"memory\";",
-              "const persistence = \"host\"; // DSHA patch: LAN 代理场景强制 host 持久化");
+      String patched = com.deepseekharness.app.util.LanSettingsPatch.apply(source);
       preparedFiles.add(module);
       if (!source.equals(patched))
         writeIfChanged(
