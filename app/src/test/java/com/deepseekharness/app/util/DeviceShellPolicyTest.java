@@ -135,7 +135,6 @@ public class DeviceShellPolicyTest {
         "cat `id`",
         "echo hi > /dev/block/a",
         "echo hi >> /sdcard/Pictures/a",
-        "ls / | head",
         "ls / && id",
         "ls /\nid",
         "r''m -rf /sdcard/Pictures",
@@ -345,5 +344,22 @@ public class DeviceShellPolicyTest {
             "/data_mirror/data_ce/null/0",
             "/mnt/expand/fixture/user/0"))
       assertTrue(root, DeviceShellPolicy.smsProviderDescendant(root));
+  }
+
+  @Test
+  public void readOnlyPipelinesAreAllowedButWritesAreNot() {
+    assertEquals(DeviceShellPolicy.Kind.READ, DeviceShellPolicy.inspect("ls / | head").kind);
+    assertEquals(DeviceShellPolicy.Kind.READ, DeviceShellPolicy.inspect("ls /sdcard; id").kind);
+    assertEquals(
+        DeviceShellPolicy.Kind.READ, DeviceShellPolicy.inspect("cat /etc/hostname | wc -l").kind);
+    denied(
+        "ls / | rm",
+        "ls / | sh -c 'rm -rf /sdcard'",
+        "cat > /sdcard/x",
+        "ls / | head > /sdcard/x",
+        "cat $(id)",
+        "ls / && id",
+        "ls / & id",
+        "ls /; rm /sdcard/Pictures/a");
   }
 }

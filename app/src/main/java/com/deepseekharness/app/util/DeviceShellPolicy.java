@@ -94,7 +94,66 @@ public final class DeviceShellPolicy {
         Kind.DENY, Collections.emptyList(), Collections.emptyList(), "[POLICY_BLOCKED] " + reason);
   }
 
+  /**
+   * Read-only конвейер: ls /sdcard | head или cat a; cat b.
+   *
+   * <p>Разрешено только когда каждый сегмент сам по себе — read-only команда из белого списка, а в
+   * строке нет записи, подстановок и фона. Возвращает null, если это не конвейер; DENY, если это
+   * конвейер с недопустимым сегментом.
+   */
+  private static Plan readOnlyPipeline(String command) {
+    if (command.indexOf('|') < 0 && command.indexOf(';') < 0) return null;
+    char quote = 0;
+    java.util.List<String> segments = new java.util.ArrayList<>();
+    StringBuilder current = new StringBuilder();
+    for (int i = 0; i < command.length(); i++) {
+      char c = command.charAt(i);
+      if (c == '>' || c == '<' || c == '$' || c == '`' || c == '&' || c == 10 || c == 13)
+        return deny(
+            com.deepseekharness.app.util.UiText.text(
+                "Конвейер разрешён только без записи, подстановок, фона и переносов строк"));
+      if (quote != 0) {
+        if (c == quote) quote = 0;
+        current.append(c);
+        continue;
+      }
+      if (c == 39 || c == 34) {
+        quote = c;
+        current.append(c);
+        continue;
+      }
+      if (c == '|' || c == ';') {
+        segments.add(current.toString());
+        current.setLength(0);
+        continue;
+      }
+      current.append(c);
+    }
+    if (quote != 0) return deny(com.deepseekharness.app.util.UiText.text("Незакрытая кавычка"));
+    segments.add(current.toString());
+    if (segments.size() < 2) return null;
+    if (segments.size() > 8)
+      return deny(com.deepseekharness.app.util.UiText.text("Слишком много частей в конвейере"));
+    for (String segment : segments) {
+      String part = segment.trim();
+      if (part.isEmpty())
+        return deny(com.deepseekharness.app.util.UiText.text("Пустая часть конвейера"));
+      Plan inner = inspect(part);
+      if (!inner.allowed() || inner.kind != Kind.READ)
+        return deny(
+            com.deepseekharness.app.util.UiText.format(
+                "В конвейере допустимы только read-only команды: %s", part));
+    }
+    java.util.List<String> argv = new java.util.ArrayList<>();
+    argv.add("sh");
+    argv.add("-c");
+    argv.add(command);
+    return plan(Kind.READ, argv, Collections.emptyList());
+  }
+
   public static Plan inspect(String command) {
+    Plan pipeline = readOnlyPipeline(command);
+    if (pipeline != null) return pipeline;
     final List<String> args;
     try {
       args = split(command);

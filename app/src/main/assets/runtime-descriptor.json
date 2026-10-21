@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "runtimeId": "b47ffa8ad0296d03a97b5059f54d4f0280d75973ad4e559606e53f9e11f378fd",
+  "runtimeId": "bf817f7652960bed1a35ea01407159ccc14f5178f690689b0eec89e8097b088c",
   "baseVersion": "10",
   "dshVersion": "0.2.1-rc.2",
   "launcherContract": "DSHA_ARM64_V2",
@@ -300,7 +300,7 @@
     "util/DeviceAppPolicy.java": "f3a77394cc21f420968e9455057de1d428f5081a69fa6d739d61d59a7cdafa6c",
     "util/DeviceFileOperations.java": "4b267daa4811b010911867232ba697c7dab141347fd3412246b27f081736d783",
     "util/DeviceScriptProof.java": "2aac3d95e2e17d4df970519619718197b1008a8913aa010efc36f8e4bb7d5588",
-    "util/DeviceShellPolicy.java": "ee6f0368d0cab9c0194de4a9b37d3a1861956d063e224ae59aaa24c6eb732ec7",
+    "util/DeviceShellPolicy.java": "d7c6ba488df0791041316b171fe83d70dc1e9a7f1dbf6d4e52acc6d15b3d2fac",
     "util/DiagnosticFailures.java": "ed5dbf35067f34df48c14bd0c66cfdb0ebe87102445c77de088aa7aa853dad6d",
     "util/DiagnosticReport.java": "2bfbadff78ff08500bc020e3b955f72f371a81c09783837ab4d96c2801af428e",
     "util/DshAuthSession.java": "23665e94947d5a782767c8cc8496c4ddae760fbbc1f10dc133f0dfc5b7aea0ee",
