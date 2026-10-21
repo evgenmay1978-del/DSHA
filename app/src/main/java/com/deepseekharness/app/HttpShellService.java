@@ -221,7 +221,7 @@ public final class HttpShellService {
     routes.put(BridgeRoutes.Route.ASK, (s, r) -> s.appAsk(r.path));
     routes.put(BridgeRoutes.Route.VERSION, (s, r) -> s.appVersion());
     routes.put(BridgeRoutes.Route.RESTART, (s, r) -> s.appRestart(r.path));
-    routes.put(BridgeRoutes.Route.PLUGINS_RELOAD, (s, r) -> s.appPluginsReload());
+    routes.put(BridgeRoutes.Route.PLUGINS_RELOAD, (s, r) -> s.appPluginsReload(r.path));
     routes.put(BridgeRoutes.Route.HELP, (s, r) -> s.appHelp());
     routes.put(BridgeRoutes.Route.PLUGINS, (s, r) -> s.appPlugins(r.path));
     routes.put(BridgeRoutes.Route.OVERLAY, (s, r) -> s.appOverlay(r.path));
@@ -1683,7 +1683,7 @@ public final class HttpShellService {
    * дописываем в конец файла строку-комментарий (атомарно, через временный файл и rename).
    * Ничего не удаляем и не переписываем: при любой ошибке файл остаётся прежним.
    */
-  private String appPluginsReload() {
+  private String appPluginsReload(String q) {
     boolean busy;
     try {
       busy = com.deepseekharness.app.backup.HostMaintenancePending.blocked(ctx.getFilesDir());
@@ -1705,6 +1705,25 @@ public final class HttpShellService {
         out.write(tail);
         out.flush();
         out.getFD().sync();
+      }
+      if (uiFlag(q, "clear_cache")) {
+        java.io.File cache = new java.io.File(rootfs, "root/.dsh/cache");
+        String[] prefixes = {"plugin", "store", "bundle"};
+        int moved = 0;
+        String[] names = cache.list();
+        if (names != null) {
+          java.io.File stale =
+              new java.io.File(cache, ".stale-" + java.time.Instant.now().toEpochMilli());
+          for (String name : names) {
+            boolean match = false;
+            for (String prefix : prefixes)
+              if (name.toLowerCase(java.util.Locale.ROOT).startsWith(prefix)) match = true;
+            if (!match) continue;
+            if (!stale.isDirectory() && !stale.mkdirs()) break;
+            if (new java.io.File(cache, name).renameTo(new java.io.File(stale, name))) moved++;
+          }
+        }
+        return "202 {\"ok\":true,\"reload\":\"requested\",\"cache_moved\":" + moved + "}";
       }
       if (!temporary.renameTo(patch)) {
         temporary.delete();
