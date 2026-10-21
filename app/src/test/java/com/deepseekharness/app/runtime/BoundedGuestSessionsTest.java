@@ -254,6 +254,49 @@ public class BoundedGuestSessionsTest {
     org.junit.Assert.assertTrue(new File(home, later.id()).isDirectory());
   }
 
+  @Test
+  public void maintenanceReapExplainsTheRebootInsteadOfReportingNothingToRecover()
+      throws Exception {
+    File files = temporary.newFolder("boot-boundary");
+    JvmBackupFileSystem fs = new JvmBackupFileSystem();
+    String id = manualV2Session(fs, files);
+    String retained =
+        BoundedGuestSessions.reapExitedTolerant(
+            fs, files, (pid, born) -> true, (pid, born) -> true, () -> "boot-a\n");
+    assertNotNull(retained);
+    org.junit.Assert.assertTrue(retained.contains("重启") || retained.contains("Restart the phone"));
+    org.junit.Assert.assertFalse(retained.startsWith("BOUNDED_GUEST_RECORDS_RETAINED"));
+    org.junit.Assert.assertEquals(id, BoundedGuestSessions.firstPending(fs, files));
+  }
+
+  @Test
+  public void maintenanceReapClosesTheBootJournalOnlyAfterARealBoot() throws Exception {
+    File files = temporary.newFolder("boot-boundary-closed");
+    JvmBackupFileSystem fs = new JvmBackupFileSystem();
+    String id = manualV2Session(fs, files);
+    assertNotNull(
+        BoundedGuestSessions.reapExitedTolerant(
+            fs, files, (pid, born) -> true, (pid, born) -> true, () -> "boot-a\n"));
+    assertNull(
+        BoundedGuestSessions.reapExitedTolerant(
+            fs, files, (pid, born) -> true, (pid, born) -> true, () -> "boot-b\n"));
+    assertNull(BoundedGuestSessions.firstPending(fs, files));
+    org.junit.Assert.assertTrue(
+        new File(files, "bounded-guest-boot-recovery/" + id + "/closed").isFile());
+  }
+
+  private static String manualV2Session(JvmBackupFileSystem fs, File files) throws IOException {
+    File home = new File(files, "bounded-guest-active");
+    fs.directory(home);
+    String id = UUID.randomUUID().toString();
+    File entry = new File(home, id);
+    fs.directory(entry);
+    write(fs, new File(entry, "intent"), id + "\n");
+    write(fs, new File(entry, "protocol"), "DSHA_OWNED_TREE_V2\n");
+    write(fs, new File(entry, "identity"), id + "\n123 456 123\n");
+    return id;
+  }
+
   private static void write(JvmBackupFileSystem fs, File file, String value) throws IOException {
     try (var out = fs.create(file)) {
       out.write(value.getBytes(StandardCharsets.US_ASCII));

@@ -577,7 +577,15 @@ public final class EnvironmentMaintenance {
     if (!MaintenanceCoordinator.isOwner())
       throw new IOException(com.deepseekharness.app.util.UiText.text("维护回滚必须经过停止屏障与全局数据任务锁"));
     File files = controller.context().getFilesDir().getCanonicalFile();
-    com.deepseekharness.app.runtime.BoundedGuestSessions.reapExitedTolerant(files);
+    String guestBefore = null;
+    try {
+      guestBefore = com.deepseekharness.app.runtime.BoundedGuestSessions.firstPending(files);
+    } catch (IOException unreadable) {
+      // An unvalidatable journal never blocks startup (#24); it must not pretend to be
+      // recoverable here either.
+    }
+    String guestRetained =
+        com.deepseekharness.app.runtime.BoundedGuestSessions.reapExitedTolerant(files);
     boolean retiredLegacy = BackupManager.retireInertLegacyReference(controller);
     ensureSingleRecovery(controller);
     if (retiredLegacy && !MaintenanceCoordinator.pending(files))
@@ -686,7 +694,27 @@ public final class EnvironmentMaintenance {
     MaintenanceTransaction pending =
         MaintenanceTransaction.pending(
             new com.deepseekharness.app.backup.AndroidBackupFileSystem(), files);
-    if (pending == null) return com.deepseekharness.app.util.UiText.text("没有未完成的环境维护。");
+    if (pending == null) {
+      // The bounded guest is the only gate without a legacy transaction: report why it is still
+      // blocked instead of claiming there is nothing to recover. The same tolerance as the startup
+      // gate applies to a journal that can no longer be validated.
+      String guestAfter = null;
+      try {
+        guestAfter = com.deepseekharness.app.runtime.BoundedGuestSessions.firstPending(files);
+      } catch (IOException unreadable) {
+      }
+      if (guestAfter != null)
+        return guestRetained != null
+            ? guestRetained
+            : com.deepseekharness.app.util.UiText.choose(
+                "受限会话尚未确认退出，环境维护仍被阻止；请结束正在运行的任务后重试。原记录和个人文件保留。",
+                "The bounded session is not confirmed exited, so maintenance stays blocked. Stop running tasks and retry; records and personal files are retained.");
+      if (guestBefore != null)
+        return com.deepseekharness.app.util.UiText.choose(
+            "中断的受限会话已收尾；原记录和个人文件保留，环境可以重新启动。",
+            "The interrupted bounded session was closed. Records and personal files are retained; the environment can start again.");
+      return com.deepseekharness.app.util.UiText.text("没有未完成的环境维护。");
+    }
     if (RuntimeTasks.hasOtherTasks())
       throw new IOException(
           com.deepseekharness.app.util.UiText.text("后台进程尚未退出，维护日志及新旧环境均保留。请等待进程退出后再恢复中断维护。"));
