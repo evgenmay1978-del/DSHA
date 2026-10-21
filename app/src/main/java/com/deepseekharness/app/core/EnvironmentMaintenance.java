@@ -577,7 +577,7 @@ public final class EnvironmentMaintenance {
     if (!MaintenanceCoordinator.isOwner())
       throw new IOException(com.deepseekharness.app.util.UiText.text("维护回滚必须经过停止屏障与全局数据任务锁"));
     File files = controller.context().getFilesDir().getCanonicalFile();
-    com.deepseekharness.app.runtime.BoundedGuestSessions.reapExited(files);
+    com.deepseekharness.app.runtime.BoundedGuestSessions.reapExitedTolerant(files);
     boolean retiredLegacy = BackupManager.retireInertLegacyReference(controller);
     ensureSingleRecovery(controller);
     if (retiredLegacy && !MaintenanceCoordinator.pending(files))

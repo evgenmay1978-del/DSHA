@@ -135,6 +135,20 @@ public final class BoundedGuestSessions {
   }
 
   /**
+   * Startup tolerance: an interrupted guest journal whose record can no longer be validated (for
+   * example a retained member written after the checkpoint) keeps every file on disk but never
+   * blocks the environment. Explicit recovery keeps the strict barrier.
+   */
+  public static void reapExitedTolerant(File filesDir) throws IOException {
+    try {
+      reapExited(filesDir);
+    } catch (IOException unconfirmed) {
+      if (!String.valueOf(unconfirmed.getMessage()).startsWith("BOUNDED_GUEST_RECORDS_RETAINED"))
+        throw unconfirmed;
+    }
+  }
+
+  /**
    * 仅恢复保留型 trial 在 nativeProtocol 持久门之前中断的准备记录。 protocol 必须先落盘才可能创建 control/spawn；原记录先整体保留，再发布同
    * UUID 完成回执。 只读 pending 不调用此方法，错误文案、空 SID 或新的试运行均不参与证明。
    */
