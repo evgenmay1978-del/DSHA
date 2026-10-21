@@ -1672,7 +1672,7 @@ public final class HttpShellService {
     worker.setDaemon(true);
     worker.start();
     return com.deepseekharness.app.util.UiText.format(
-        "202 {"ok":true,"job_id":"%s","target":"%s"}", job, target);
+        "202 {\"ok\":true,\"job_id\":\"%s\",\"target\":\"%s\"}", job, target);
   }
 
   private String appVersion() {
