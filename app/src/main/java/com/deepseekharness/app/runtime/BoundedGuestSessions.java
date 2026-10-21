@@ -758,32 +758,44 @@ public final class BoundedGuestSessions {
   }
 
   /**
-   * True only when every live process of this app UID is one of the app's own zygote processes
-   * (main process name, or name:suffix). Guest launchers, proot/bxroot and all their descendants run
-   * under the same UID with other names, so none of an interrupted record's tree can survive this.
-   * Zombies cannot fork and are ignored. Any unreadable entry fails closed.
+   * True only when every live process of this app UID is one of the app's own zygote processes.
+   * Guest commands, proot/bxroot and all their descendants run under the same UID, so any surviving
+   * member of the recorded tree would show up here. Identity must not be spoofable by the guest: a
+   * matching argv[0] is not enough, so a process counts as ours only when it was forked from the
+   * same zygote as this app and still executes {@code app_process}. Zombies cannot fork and are
+   * ignored. Anything unreadable fails closed and keeps the reboot requirement.
    */
   static boolean appUidQuiescent() throws IOException {
-    String self = processName(new File("/proc/self"));
-    if (self == null || self.isEmpty()) throw new IOException("BOUNDED_GUEST_SELF_NAME_UNKNOWN");
-    int colon = self.indexOf(':');
-    String base = colon < 0 ? self : self.substring(0, colon);
-    return appUidQuiescent(new File("/proc"), android.os.Process.myUid(), base);
+    long zygote = parentPid(new File("/proc/self"));
+    return appUidQuiescent(
+        new File("/proc"),
+        android.os.Process.myUid(),
+        zygote,
+        BoundedGuestSessions::ownerUid,
+        BoundedGuestSessions::executable);
   }
 
-  static boolean appUidQuiescent(File proc, int uid, String base) throws IOException {
+  interface OwnerProbe {
+    /** Process UID, or {@link #GONE} when the process vanished while being scanned. */
+    int uid(File entry) throws IOException;
+  }
+
+  interface ExecutableProbe {
+    /** Absolute executable path, or null when it cannot be read. */
+    String path(File entry) throws IOException;
+  }
+
+  static final int GONE = -1;
+
+  static boolean appUidQuiescent(
+      File proc, int uid, long zygote, OwnerProbe owner, ExecutableProbe executable)
+      throws IOException {
     File[] entries = proc.listFiles();
     if (entries == null) throw new IOException("BOUNDED_GUEST_PROC_UNREADABLE");
     for (File entry : entries) {
       if (!entry.getName().matches("[1-9][0-9]*")) continue;
-      int owner;
-      try {
-        owner = Os.stat(entry.getAbsolutePath()).st_uid;
-      } catch (ErrnoException error) {
-        if (error.errno == OsConstants.ENOENT || error.errno == OsConstants.ESRCH) continue;
-        throw new IOException("BOUNDED_GUEST_OWNER_UNREADABLE", error);
-      }
-      if (owner != uid) continue;
+      int ownerUid = owner.uid(entry);
+      if (ownerUid == GONE || ownerUid != uid) continue;
       String stat;
       try {
         stat = Compat.readAll(new File(entry, "stat"));
@@ -796,15 +808,59 @@ public final class BoundedGuestSessions {
         throw new IOException("BOUNDED_GUEST_PROC_STAT_INVALID");
       char state = stat.charAt(close + 2);
       if (state == 'Z' || state == 'X') continue;
-      String name = processName(entry);
-      if (name == null) {
-        if (!entry.exists()) continue;
-        return false;
-      }
-      if (name.equals(base) || name.startsWith(base + ":")) continue;
-      return false;
+      if (parent(stat) != zygote) return false;
+      if (!appProcess(executable.path(entry))) return false;
     }
     return true;
+  }
+
+  /** Both conditions are properties the guest cannot acquire by naming its process. */
+  private static boolean appProcess(String path) {
+    if (path == null || path.isEmpty()) return false;
+    return path.substring(path.lastIndexOf('/') + 1).startsWith("app_process");
+  }
+
+  private static long parentPid(File entry) throws IOException {
+    String stat;
+    try {
+      stat = Compat.readAll(new File(entry, "stat"));
+    } catch (IOException unreadable) {
+      throw new IOException("BOUNDED_GUEST_SELF_STAT_UNREADABLE", unreadable);
+    }
+    int close = stat.lastIndexOf(')');
+    if (close < 0 || close + 2 >= stat.length())
+      throw new IOException("BOUNDED_GUEST_PROC_STAT_INVALID");
+    return parent(stat);
+  }
+
+  private static long parent(String stat) throws IOException {
+    int close = stat.lastIndexOf(')');
+    if (close < 0 || close + 2 >= stat.length())
+      throw new IOException("BOUNDED_GUEST_PROC_STAT_INVALID");
+    try {
+      String[] fields = stat.substring(close + 2).trim().split("\\s+");
+      if (fields.length < 2) throw new NumberFormatException();
+      return Long.parseLong(fields[1]);
+    } catch (RuntimeException invalid) {
+      throw new IOException("BOUNDED_GUEST_PROC_STAT_INVALID", invalid);
+    }
+  }
+
+  private static int ownerUid(File entry) throws IOException {
+    try {
+      return Os.stat(entry.getAbsolutePath()).st_uid;
+    } catch (ErrnoException error) {
+      if (error.errno == OsConstants.ENOENT || error.errno == OsConstants.ESRCH) return GONE;
+      throw new IOException("BOUNDED_GUEST_OWNER_UNREADABLE", error);
+    }
+  }
+
+  private static String executable(File entry) {
+    try {
+      return Os.readlink(new File(entry, "exe").getAbsolutePath());
+    } catch (ErrnoException unavailable) {
+      return null;
+    }
   }
 
   private static String processName(File entry) {

@@ -231,7 +231,7 @@ final class BoundedGuestBootRecovery {
         || !fields[1].equals(checkpoint.id)
         || !fields[2].equals(checkpoint.boot)
         || !fields[3].matches(UUID)
-        || !quiescent && fields[2].equals(fields[3])
+        || quiescent != fields[2].equals(fields[3])
         || !fields[4].equals(checkpoint.digest)
         || !fields[5].isEmpty()) throw new IOException("BOUNDED_GUEST_BOOT_PROOF_INVALID");
   }
@@ -304,8 +304,7 @@ final class BoundedGuestBootRecovery {
     } catch (NumberFormatException invalid) {
       throw new IOException("BOUNDED_GUEST_BOOT_RECORD_INVALID", invalid);
     }
-    if (!directory.same(fs.stat(entry))
-        || !new HashSet<>(fs.list(entry)).equals(new HashSet<>(MEMBERS)))
+    if (!directory.same(fs.stat(entry)) || !new HashSet<>(fs.list(entry)).equals(names))
       throw new IOException("BOUNDED_GUEST_BOOT_RECORD_CHANGED");
     return bytes.toByteArray();
   }

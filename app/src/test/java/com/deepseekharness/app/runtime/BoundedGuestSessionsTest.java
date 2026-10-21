@@ -286,6 +286,83 @@ public class BoundedGuestSessionsTest {
         new File(files, "bounded-guest-boot-recovery/" + id + "/closed").isFile());
   }
 
+  @Test
+  public void quiescenceAcceptsOnlyZygoteChildrenRunningAppProcess() throws Exception {
+    File proc = temporary.newFolder("proc-quiet");
+    pid(proc, 101, "S 42 0 0");
+    pid(proc, 102, "Z 1 0 0");
+    org.junit.Assert.assertTrue(
+        BoundedGuestSessions.appUidQuiescent(
+            proc, 4242, 42, (entry) -> 4242, (entry) -> "/system/bin/app_process64"));
+  }
+
+  @Test
+  public void quiescenceRejectsAGuestThatNamesItselfLikeTheApp() throws Exception {
+    File proc = temporary.newFolder("proc-spoof");
+    pid(proc, 101, "S 42 0 0");
+    // Same argv[0] as the app, but the guest neither came from zygote nor runs app_process.
+    pid(proc, 103, "S 1 0 0");
+    org.junit.Assert.assertFalse(
+        BoundedGuestSessions.appUidQuiescent(
+            proc,
+            4242,
+            42,
+            (entry) -> 4242,
+            (entry) ->
+                entry.getName().equals("103") ? "/system/bin/bash" : "/system/bin/app_process64"));
+  }
+
+  @Test
+  public void quiescenceRejectsAProcessThatLostTheZygoteParent() throws Exception {
+    File proc = temporary.newFolder("proc-reparented");
+    pid(proc, 101, "S 42 0 0");
+    pid(proc, 104, "S 1 0 0");
+    org.junit.Assert.assertFalse(
+        BoundedGuestSessions.appUidQuiescent(
+            proc, 4242, 42, (entry) -> 4242, (entry) -> "/system/bin/app_process64"));
+  }
+
+  @Test
+  public void quiescenceFailsClosedWhenTheExecutableIsUnreadable() throws Exception {
+    File proc = temporary.newFolder("proc-unreadable");
+    pid(proc, 101, "S 42 0 0");
+    org.junit.Assert.assertFalse(
+        BoundedGuestSessions.appUidQuiescent(proc, 4242, 42, (entry) -> 4242, (entry) -> null));
+  }
+
+  @Test
+  public void quiescenceIgnoresOtherUidsAndPropagatesUnreadableOwners() throws Exception {
+    File proc = temporary.newFolder("proc-owners");
+    pid(proc, 101, "S 42 0 0");
+    pid(proc, 105, "S 1 0 0");
+    org.junit.Assert.assertTrue(
+        BoundedGuestSessions.appUidQuiescent(
+            proc,
+            4242,
+            42,
+            (entry) -> entry.getName().equals("105") ? 20000 : 4242,
+            (entry) -> "/system/bin/app_process64"));
+    assertThrows(
+        IOException.class,
+        () ->
+            BoundedGuestSessions.appUidQuiescent(
+                proc,
+                4242,
+                42,
+                (entry) -> {
+                  throw new IOException("OWNER_DENIED");
+                },
+                (entry) -> "/system/bin/app_process64"));
+  }
+
+  private static void pid(File proc, int pid, String tail) throws IOException {
+    File directory = new File(proc, Integer.toString(pid));
+    if (!directory.mkdir()) throw new IOException("PID_DIR");
+    try (var out = new java.io.FileWriter(new File(directory, "stat"))) {
+      out.write(pid + " (process) " + tail + " 0 0 0 0 0\n");
+    }
+  }
+
   private static final String BOOT_A = "11111111-1111-1111-1111-111111111111\n";
   private static final String BOOT_B = "22222222-2222-2222-2222-222222222222\n";
 
