@@ -582,7 +582,8 @@ public final class EnvironmentMaintenance {
       guestBefore = com.deepseekharness.app.runtime.BoundedGuestSessions.firstPending(files);
     } catch (IOException unreadable) {
       // An unvalidatable journal never blocks startup (#24); it must not pretend to be
-      // recoverable here either.
+      // recoverable work here either.
+      guestBefore = null;
     }
     String guestRetained =
         com.deepseekharness.app.runtime.BoundedGuestSessions.reapExitedTolerant(files);
@@ -702,6 +703,7 @@ public final class EnvironmentMaintenance {
       try {
         guestAfter = com.deepseekharness.app.runtime.BoundedGuestSessions.firstPending(files);
       } catch (IOException unreadable) {
+        guestAfter = null;
       }
       if (guestAfter != null)
         return guestRetained != null
