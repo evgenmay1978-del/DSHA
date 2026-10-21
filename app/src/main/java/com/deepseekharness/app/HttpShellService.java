@@ -220,6 +220,8 @@ public final class HttpShellService {
     routes.put(BridgeRoutes.Route.VIBRATE, (s, r) -> s.appVibrate(r.path));
     routes.put(BridgeRoutes.Route.ASK, (s, r) -> s.appAsk(r.path));
     routes.put(BridgeRoutes.Route.VERSION, (s, r) -> s.appVersion());
+    routes.put(BridgeRoutes.Route.RESTART, (s, r) -> s.appRestart(r.path));
+    routes.put(BridgeRoutes.Route.PLUGINS_RELOAD, (s, r) -> s.appPluginsReload(r.path));
     routes.put(BridgeRoutes.Route.HELP, (s, r) -> s.appHelp());
     routes.put(BridgeRoutes.Route.PLUGINS, (s, r) -> s.appPlugins(r.path));
     routes.put(BridgeRoutes.Route.OVERLAY, (s, r) -> s.appOverlay(r.path));
@@ -1619,10 +1621,114 @@ public final class HttpShellService {
    * <p>没有这个端点时，插件只能靠「试着调一下看会不会 404」来猜 App 的能力，
    * 而 dsh 与 DSHA 是各自升级的 —— 用户完全可能拿新插件配旧 App。
    */
+  /** 正在进行的重启：第二次调用直接拒绝，避免自激循环（EADDRINUSE 抖动）。 */
+  private static final java.util.concurrent.atomic.AtomicBoolean RESTARTING =
+      new java.util.concurrent.atomic.AtomicBoolean();
+
+  /**
+   * {@code /app/restart?target=engine|app}: аккуратный перезапуск без ручных действий.
+   *
+   * <p>Никогда не запускается во время обслуживания: незавершённый журнал + рестарт — это ровно
+   * тот сценарий, который раньше превращался в «среда не поднимается».
+   */
+  private String appRestart(String q) {
+    String target = getParam(q, "target", "engine").trim().toLowerCase(java.util.Locale.ROOT);
+    if (!target.equals("engine") && !target.equals("app"))
+      return "[ERR] RESTART_TARGET_UNKNOWN: target=engine|app";
+    boolean busy = com.deepseekharness.app.backup.HostMaintenancePending.blocked(ctx.getFilesDir());
+    if (busy)
+      return "[ERR] RESTART_BLOCKED: незавершённое обслуживание, сначала завершите восстановление";
+    if (!RESTARTING.compareAndSet(false, true)) return "[ERR] RESTART_IN_PROGRESS";
+    String job = java.util.UUID.randomUUID().toString();
+    Thread worker =
+        new Thread(
+            () -> {
+              boolean engine = !target.equals("app");
+              try {
+                if (!engine) {
+                  Thread.sleep(1500L);
+                  android.os.Process.killProcess(android.os.Process.myPid());
+                  return;
+                }
+                com.deepseekharness.app.core.HarnessController controller =
+                    com.deepseekharness.app.core.HarnessController.get(ctx);
+                if (controller == null) return;
+                controller.stopWeb();
+                Thread.sleep(2000L);
+                controller.startWeb(status -> {});
+              } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+              } catch (RuntimeException failed) {
+                // 重启失败不抛出: состояние остаётся в维护-записи, вызывающий проверяет /app/version.
+              } finally {
+                if (engine) RESTARTING.set(false);
+              }
+            },
+            "dsha-bridge-restart");
+    worker.setDaemon(true);
+    worker.start();
+    return com.deepseekharness.app.util.UiText.format(
+        "202 {\"ok\":true,\"job_id\":\"%s\",\"target\":\"%s\"}", job, target);
+  }
+
+  /**
+   * {@code /app/plugins/reload}: штатный триггер перезагрузки бандлов профиля.
+   *
+   * <p>Ядро dsh подхватывает правку {@code cordis.patch.yml} горячей перезагрузкой, поэтому
+   * дописываем в конец файла строку-комментарий (атомарно, через временный файл и rename).
+   * Ничего не удаляем и не переписываем: при любой ошибке файл остаётся прежним.
+   */
+  private String appPluginsReload(String q) {
+    boolean busy = com.deepseekharness.app.backup.HostMaintenancePending.blocked(ctx.getFilesDir());
+    if (busy) return "[ERR] RELOAD_BLOCKED: незавершённое обслуживание";
+    java.io.File rootfs = com.deepseekharness.app.util.GuestPaths.rootfs(ctx.getFilesDir());
+    java.io.File patch = new java.io.File(rootfs, "root/.dsh/profiles/web/cordis.patch.yml");
+    if (!patch.isFile()) return "[ERR] RELOAD_NO_PROFILE: cordis.patch.yml не найден";
+    try {
+      byte[] body = java.nio.file.Files.readAllBytes(patch.toPath());
+      String marker = "# dsha reload-request " + java.time.Instant.now() + System.lineSeparator();
+      byte[] tail = marker.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      java.io.File temporary =
+          new java.io.File(patch.getParentFile(), "cordis.patch.yml.dsha-" + System.nanoTime());
+      try (java.io.FileOutputStream out = new java.io.FileOutputStream(temporary)) {
+        out.write(body);
+        out.write(tail);
+        out.flush();
+        out.getFD().sync();
+      }
+      if (uiFlag(q, "clear_cache")) {
+        java.io.File cache = new java.io.File(rootfs, "root/.dsh/cache");
+        String[] prefixes = {"plugin", "store", "bundle"};
+        int moved = 0;
+        String[] names = cache.list();
+        if (names != null) {
+          java.io.File stale =
+              new java.io.File(cache, ".stale-" + java.time.Instant.now().toEpochMilli());
+          for (String name : names) {
+            boolean match = false;
+            for (String prefix : prefixes)
+              if (name.toLowerCase(java.util.Locale.ROOT).startsWith(prefix)) match = true;
+            if (!match) continue;
+            if (!stale.isDirectory() && !stale.mkdirs()) break;
+            if (new java.io.File(cache, name).renameTo(new java.io.File(stale, name))) moved++;
+          }
+        }
+        return "202 {\"ok\":true,\"reload\":\"requested\",\"cache_moved\":" + moved + "}";
+      }
+      if (!temporary.renameTo(patch)) {
+        temporary.delete();
+        return "[ERR] RELOAD_WRITE_FAILED";
+      }
+      return "202 {\"ok\":true,\"reload\":\"requested\"}";
+    } catch (java.io.IOException failed) {
+      return "[ERR] RELOAD_WRITE_FAILED: " + failed.getClass().getSimpleName();
+    }
+  }
+
   private String appVersion() {
     return com.deepseekharness.app.util.UiText.format(
-        "BRIDGE_PROTOCOL=%s\nBRIDGE_AUTH=header-x-token\nAPP_VERSION=%s\nAPP_CODE=%s\nHINT=端点清单见 /app/help；判版本请用 >= 而不是 ==\n",
-        BRIDGE_PROTOCOL, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE);
+        "BRIDGE_PROTOCOL=%s\nBRIDGE_AUTH=header-x-token\nAPP_VERSION=%s\nAPP_CODE=%s\nAPP_PACKAGE=%s\nHINT=端点清单见 /app/help；判版本请用 >= 而不是 ==\n",
+        BRIDGE_PROTOCOL, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, ctx.getPackageName());
   }
 
   /** /app/help lists bridge endpoint parameters for authenticated clients. */
