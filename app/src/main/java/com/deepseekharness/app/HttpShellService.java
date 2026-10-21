@@ -1635,12 +1635,7 @@ public final class HttpShellService {
     String target = getParam(q, "target", "engine").trim().toLowerCase(java.util.Locale.ROOT);
     if (!target.equals("engine") && !target.equals("app"))
       return "[ERR] RESTART_TARGET_UNKNOWN: target=engine|app";
-    boolean busy;
-    try {
-      busy = com.deepseekharness.app.backup.HostMaintenancePending.blocked(ctx.getFilesDir());
-    } catch (java.io.IOException unreadable) {
-      busy = true;
-    }
+    boolean busy = com.deepseekharness.app.backup.HostMaintenancePending.blocked(ctx.getFilesDir());
     if (busy)
       return "[ERR] RESTART_BLOCKED: незавершённое обслуживание, сначала завершите восстановление";
     if (!RESTARTING.compareAndSet(false, true)) return "[ERR] RESTART_IN_PROGRESS";
@@ -1684,12 +1679,7 @@ public final class HttpShellService {
    * Ничего не удаляем и не переписываем: при любой ошибке файл остаётся прежним.
    */
   private String appPluginsReload(String q) {
-    boolean busy;
-    try {
-      busy = com.deepseekharness.app.backup.HostMaintenancePending.blocked(ctx.getFilesDir());
-    } catch (java.io.IOException unreadable) {
-      busy = true;
-    }
+    boolean busy = com.deepseekharness.app.backup.HostMaintenancePending.blocked(ctx.getFilesDir());
     if (busy) return "[ERR] RELOAD_BLOCKED: незавершённое обслуживание";
     java.io.File rootfs = com.deepseekharness.app.util.GuestPaths.rootfs(ctx.getFilesDir());
     java.io.File patch = new java.io.File(rootfs, "root/.dsh/profiles/web/cordis.patch.yml");
