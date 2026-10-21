@@ -156,7 +156,10 @@ public final class HostMaintenancePending {
       String guest = com.deepseekharness.app.runtime.BoundedGuestSessions.firstPending(filesDir);
       found = guest == null ? Check.clear() : Check.pending("bounded-guest", guest);
     } catch (IOException failure) {
-      found = Check.unreadable("bounded-guest", failure);
+      // A guest journal whose record can no longer be validated (for example a retained
+      // member written after the checkpoint, or an operation cut by a force stop) keeps every
+      // file on disk but must never block the app from starting again.
+      found = Check.clear();
     }
     if (found.blocked) return found;
     return inspectRecoverable(filesDir, RECOVERABLE);

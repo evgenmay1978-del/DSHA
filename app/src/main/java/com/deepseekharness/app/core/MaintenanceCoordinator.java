@@ -134,7 +134,7 @@ public final class MaintenanceCoordinator {
 
     @Override
     public void confirmOtherProcesses() throws IOException {
-      com.deepseekharness.app.runtime.BoundedGuestSessions.reapExited(
+      com.deepseekharness.app.runtime.BoundedGuestSessions.reapExitedTolerant(
           controller.context().getFilesDir());
     }
 
