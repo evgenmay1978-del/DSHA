@@ -1718,8 +1718,8 @@ public final class HttpShellService {
 
   private String appVersion() {
     return com.deepseekharness.app.util.UiText.format(
-        "BRIDGE_PROTOCOL=%s\nBRIDGE_AUTH=header-x-token\nAPP_VERSION=%s\nAPP_CODE=%s\nHINT=端点清单见 /app/help；判版本请用 >= 而不是 ==\n",
-        BRIDGE_PROTOCOL, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE);
+        "BRIDGE_PROTOCOL=%s\nBRIDGE_AUTH=header-x-token\nAPP_VERSION=%s\nAPP_CODE=%s\nAPP_PACKAGE=%s\nHINT=端点清单见 /app/help；判版本请用 >= 而不是 ==\n",
+        BRIDGE_PROTOCOL, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, ctx.getPackageName());
   }
 
   /** /app/help lists bridge endpoint parameters for authenticated clients. */
