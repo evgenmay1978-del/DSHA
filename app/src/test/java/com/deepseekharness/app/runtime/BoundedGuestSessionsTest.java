@@ -262,9 +262,10 @@ public class BoundedGuestSessionsTest {
     String id = manualV2Session(fs, files);
     String retained =
         BoundedGuestSessions.reapExitedTolerant(
-            fs, files, (pid, born) -> true, (pid, born) -> true, () -> "boot-a\n");
+            fs, files, (pid, born) -> true, (pid, born) -> true, () -> BOOT_A);
     assertNotNull(retained);
-    org.junit.Assert.assertTrue(retained.contains("重启") || retained.contains("Restart the phone"));
+    org.junit.Assert.assertTrue(
+        retained.contains("需重启手机") || retained.contains("Restart the phone"));
     org.junit.Assert.assertFalse(retained.startsWith("BOUNDED_GUEST_RECORDS_RETAINED"));
     org.junit.Assert.assertEquals(id, BoundedGuestSessions.firstPending(fs, files));
   }
@@ -276,14 +277,17 @@ public class BoundedGuestSessionsTest {
     String id = manualV2Session(fs, files);
     assertNotNull(
         BoundedGuestSessions.reapExitedTolerant(
-            fs, files, (pid, born) -> true, (pid, born) -> true, () -> "boot-a\n"));
+            fs, files, (pid, born) -> true, (pid, born) -> true, () -> BOOT_A));
     assertNull(
         BoundedGuestSessions.reapExitedTolerant(
-            fs, files, (pid, born) -> true, (pid, born) -> true, () -> "boot-b\n"));
+            fs, files, (pid, born) -> true, (pid, born) -> true, () -> BOOT_B));
     assertNull(BoundedGuestSessions.firstPending(fs, files));
     org.junit.Assert.assertTrue(
         new File(files, "bounded-guest-boot-recovery/" + id + "/closed").isFile());
   }
+
+  private static final String BOOT_A = "11111111-1111-1111-1111-111111111111\n";
+  private static final String BOOT_B = "22222222-2222-2222-2222-222222222222\n";
 
   private static String manualV2Session(JvmBackupFileSystem fs, File files) throws IOException {
     File home = new File(files, "bounded-guest-active");
