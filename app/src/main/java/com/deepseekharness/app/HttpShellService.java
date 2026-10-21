@@ -1700,7 +1700,7 @@ public final class HttpShellService {
       byte[] tail = marker.getBytes(java.nio.charset.StandardCharsets.UTF_8);
       java.io.File temporary =
           new java.io.File(patch.getParentFile(), "cordis.patch.yml.dsha-" + System.nanoTime());
-      try (java.io.OutputStream out = new java.io.FileOutputStream(temporary)) {
+      try (java.io.FileOutputStream out = new java.io.FileOutputStream(temporary)) {
         out.write(body);
         out.write(tail);
         out.flush();
