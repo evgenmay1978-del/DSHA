@@ -31,6 +31,7 @@ public final class BridgeRoutes {
     ASK(false),
     VERSION(false),
     RESTART(false),
+    PLUGINS_RELOAD(false),
     HELP(false),
     PLUGINS(false),
     OVERLAY(false),
@@ -82,6 +83,7 @@ public final class BridgeRoutes {
     add(routes, "/app/ask", Route.ASK);
     add(routes, "/app/version", Route.VERSION);
     add(routes, "/app/restart", Route.RESTART);
+    add(routes, "/app/plugins/reload", Route.PLUGINS_RELOAD);
     add(routes, "/app/help", Route.HELP);
     add(routes, "/app/plugins", Route.PLUGINS);
     add(routes, "/app/overlay", Route.OVERLAY);
