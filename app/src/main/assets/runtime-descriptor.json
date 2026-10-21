@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "runtimeId": "6dca5619fe63d0f2aade678bc9b616804dd472758f230b208087c760f01ab5b6",
+  "runtimeId": "9097b478ecea6f3f4dd1445c32bfb3c74149aea500edcc4803bed38b6b16556e",
   "baseVersion": "10",
   "dshVersion": "0.2.1-rc.2",
   "launcherContract": "DSHA_ARM64_V2",
@@ -205,7 +205,7 @@
     "runtime/BasicToolsInstaller.java": "c9fb7493d7db8f9c5d84f42ec8bb08fec6d1ad4372f149b3170acae096d839f7",
     "runtime/BoundedGuestBootRecovery.java": "14972ba2357d01b8e2e454b56cf8f98ad8dd890ad6e8221fd80040a3922e72c7",
     "runtime/BoundedGuestLifetime.java": "2ff99d961b010f31959df45ebf2c68c779672d84035ee4a578d770107074d431",
-    "runtime/BoundedGuestSessions.java": "8b380318256054b366a661defc1dd2f5e307b75af4be68db123e3c1f36ebc3e4",
+    "runtime/BoundedGuestSessions.java": "1bfe2afc0827f371802ace8cb91e30f61c3d13093e0c53cd1c37c99acf1f83db",
     "runtime/BxrootPrivateRoot.java": "1ef7b828f8abc8cca0279e00cfca4531269289abfa8680dbada532dfbbe857ce",
     "runtime/BxrootRuntime.java": "a55b4bcbf00f3df3d73f6f417272a0cc08e3b8049f80ca02a8702cb15dc641c5",
     "runtime/ColdBundleExtractor.java": "8794a5e8b1dd0ac6dce00d55c964e7ce26fd24d1a1f4574eddf6386401018c07",
