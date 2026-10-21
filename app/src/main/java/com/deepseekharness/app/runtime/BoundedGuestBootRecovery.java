@@ -283,6 +283,20 @@ final class BoundedGuestBootRecovery {
         out.writeInt(value.length);
         out.write(value);
       }
+      // The optional owner marker is part of the canonical snapshot: a marker added or changed
+      // after the checkpoint must fail the comparison instead of being silently accepted.
+      if (names.contains("retain")) {
+        File file = fs.child(entry, "retain");
+        BackupFileSystem.Node node = fs.stat(file);
+        byte[] value = fs.small(file, 64);
+        if (!node.same(fs.stat(file))) throw new IOException("BOUNDED_GUEST_BOOT_RECORD_CHANGED");
+        if (!Arrays.equals(value, ascii("RECORDED_OWNER\n")))
+          throw new IOException("BOUNDED_GUEST_BOOT_RECORD_INVALID");
+        out.writeUTF("retain");
+        identity(out, node, true);
+        out.writeInt(value.length);
+        out.write(value);
+      }
     }
     String birth = new String(values.get("identity"), StandardCharsets.US_ASCII);
     String[] lines = birth.split("\n", -1);
@@ -292,9 +306,6 @@ final class BoundedGuestBootRecovery {
         || !lines[1].matches("[1-9][0-9]* [1-9][0-9]* [1-9][0-9]*")
         || !Arrays.equals(values.get("intent"), ascii(id + "\n"))
         || !Arrays.equals(values.get("protocol"), ascii("DSHA_OWNED_TREE_V2\n")))
-      throw new IOException("BOUNDED_GUEST_BOOT_RECORD_INVALID");
-    if (names.contains("retain")
-        && !Arrays.equals(fs.small(fs.child(entry, "retain"), 64), ascii("RECORDED_OWNER\n")))
       throw new IOException("BOUNDED_GUEST_BOOT_RECORD_INVALID");
     try {
       String[] fields = lines[1].split(" ");
