@@ -514,4 +514,126 @@ public class BoundedGuestBootRecoveryTest {
         closed(f);
       }
   }
+
+  private static void reapQuiet(Fixture f, String boot, BoundedGuestBootRecovery.Quiescence quiet)
+      throws IOException {
+    BoundedGuestSessions.reapExited(
+        f.fs,
+        f.files,
+        (pid, born) -> {
+          throw new AssertionError("A V2 unknown tree cannot use SID evidence");
+        },
+        (pid, born) -> {
+          throw new AssertionError("A V2 unknown tree cannot use leader absence");
+        },
+        () -> boot,
+        quiet);
+  }
+
+  private static void quiescentClosed(Fixture f) throws IOException {
+    assertNull(BoundedGuestSessions.firstPending(f.fs, f.files));
+    assertFalse(f.entry.exists());
+    File original = new File(journal(f), "original");
+    assertEquals(Set.of("identity", "intent", "protocol"), new HashSet<>(f.fs.list(original)));
+    String proof = Files.readString(new File(journal(f), "closed").toPath());
+    assertTrue(proof.startsWith("DSHA_UID_QUIESCENT_CLOSED_V1\n" + f.id + "\n"));
+    assertFalse(proof.contains("ECHILD"));
+    assertThrows(
+        IOException.class, () -> BoundedGuestSessions.recordedCompletion(f.fs, f.files, f.id));
+  }
+
+  @Test
+  public void quiescentAppUidClosesSameBootWithoutReboot() throws Exception {
+    Fixture f = fixture(new JvmBackupFileSystem());
+    String key = f.fs.stat(f.entry).key;
+    reapQuiet(f, BOOT_A, () -> true);
+    quiescentClosed(f);
+    assertEquals(key, f.fs.stat(new File(journal(f), "original")).key);
+    reapQuiet(f, BOOT_A, () -> true);
+    quiescentClosed(f);
+    reap(f, BOOT_A);
+    quiescentClosed(f);
+  }
+
+  @Test
+  public void quiescenceClosesAfterEarlierCheckpoint() throws Exception {
+    Fixture f = fixture(new JvmBackupFileSystem());
+    checkpoint(f);
+    reapQuiet(f, BOOT_A, () -> true);
+    quiescentClosed(f);
+  }
+
+  @Test
+  public void retainedRecordAlsoClosesWhenQuiescent() throws Exception {
+    Fixture f = fixture(new JvmBackupFileSystem());
+    write(f.fs, new File(f.entry, "retain"), "RECORDED_OWNER\n");
+    reapQuiet(f, BOOT_A, () -> true);
+    assertNull(BoundedGuestSessions.firstPending(f.fs, f.files));
+    assertFalse(f.entry.exists());
+  }
+
+  @Test
+  public void liveOrUnreadableUidKeepsRebootRequirement() throws Exception {
+    List<BoundedGuestBootRecovery.Quiescence> unproven =
+        List.of(
+            () -> false,
+            () -> {
+              throw new IOException("PROC_DENIED");
+            },
+            () -> {
+              throw new IllegalStateException("Stub!");
+            });
+    for (BoundedGuestBootRecovery.Quiescence quiet : unproven) {
+      Fixture f = fixture(new JvmBackupFileSystem());
+      IOException error = assertThrows(IOException.class, () -> reapQuiet(f, BOOT_A, quiet));
+      assertTrue(error.getMessage(), error.getMessage().contains("REAL_REBOOT_REQUIRED"));
+      assertTrue(f.entry.isDirectory());
+      assertFalse(new File(journal(f), "closed").exists());
+      assertNotNull(BoundedGuestSessions.firstPending(f.fs, f.files));
+    }
+  }
+
+  @Test
+  public void processAppearingBeforeMoveKeepsOriginalActive() throws Exception {
+    Fixture f = fixture(new JvmBackupFileSystem());
+    int[] calls = {0};
+    assertThrows(IOException.class, () -> reapQuiet(f, BOOT_A, () -> calls[0]++ == 0));
+    assertTrue(f.entry.isDirectory());
+    assertFalse(new File(journal(f), "original").exists());
+    assertFalse(new File(journal(f), "closed").exists());
+  }
+
+  @Test
+  public void processAppearingAfterMoveLeavesProofUnwrittenAndResumes() throws Exception {
+    Fixture f = fixture(new JvmBackupFileSystem());
+    int[] calls = {0};
+    assertThrows(IOException.class, () -> reapQuiet(f, BOOT_A, () -> calls[0]++ < 2));
+    assertFalse(f.entry.exists());
+    assertTrue(new File(journal(f), "original").isDirectory());
+    assertFalse(new File(journal(f), "closed").exists());
+    assertNotNull(BoundedGuestSessions.firstPending(f.fs, f.files));
+    reapQuiet(f, BOOT_A, () -> true);
+    quiescentClosed(f);
+  }
+
+  @Test
+  public void rebootStillWritesBootBoundaryProofEvenWhenQuiescent() throws Exception {
+    Fixture f = fixture(new JvmBackupFileSystem());
+    checkpoint(f);
+    reapQuiet(f, BOOT_B, () -> true);
+    closed(f);
+  }
+
+  @Test
+  public void partialQuiescentProofTemporaryIsOwned() throws Exception {
+    Fixture f = fixture(new JvmBackupFileSystem());
+    checkpoint(f);
+    write(
+        f.fs,
+        new File(journal(f), "closed.tmp-" + UUID.randomUUID()),
+        "DSHA_UID_QUIESCENT_CLOSED_V1\n" + f.id + "\n");
+    assertNotNull(BoundedGuestSessions.firstPending(f.fs, f.files));
+    reapQuiet(f, BOOT_A, () -> true);
+    quiescentClosed(f);
+  }
 }

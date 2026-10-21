@@ -134,6 +134,35 @@ public final class BoundedGuestSessions {
     return firstPending(new AndroidBackupFileSystem(), filesDir.getCanonicalFile());
   }
 
+  private static final java.util.concurrent.atomic.AtomicBoolean settled =
+      new java.util.concurrent.atomic.AtomicBoolean();
+
+  /**
+   * #28: an app that was swiped away, force-stopped, updated or rebooted must simply start again.
+   * Called once from the main process before anything can launch a guest, so every record on disk
+   * belongs to an earlier process. Records are closed through the normal strict path (reboot
+   * boundary or UID quiescence); whatever cannot be proven stays on disk for explicit recovery.
+   *
+   * @return null when nothing was pending, "CLOSED" when records were closed, otherwise the reason
+   *     they were retained (for the diagnostic log only).
+   */
+  public static String settleAfterRestart(File filesDir) {
+    if (!settled.compareAndSet(false, true)) return null;
+    try {
+      String self = processName(new File("/proc/self"));
+      if (self == null || self.isEmpty() || self.contains(":")) return null;
+      if (!active.isEmpty()) return "BOUNDED_GUEST_SETTLE_SKIPPED_ACTIVE";
+      File files = filesDir.getCanonicalFile();
+      BackupFileSystem fs = new AndroidBackupFileSystem();
+      if (firstPending(fs, files) == null) return null;
+      reapExited(files);
+      return "CLOSED";
+    } catch (IOException | RuntimeException retained) {
+      return com.deepseekharness.app.util.SensitiveData.redact(
+          String.valueOf(retained.getMessage()));
+    }
+  }
+
   /**
    * Startup tolerance: an interrupted guest journal whose record can no longer be validated (for
    * example a retained member written after the checkpoint) keeps every file on disk but never
@@ -321,7 +350,17 @@ public final class BoundedGuestSessions {
    * Under an exclusive maintenance fence, remove only records whose whole session is proven empty.
    */
   public static void reapExited(File filesDir) throws IOException {
-    reapExited(new AndroidBackupFileSystem(), filesDir.getCanonicalFile());
+    BackupFileSystem fs = new AndroidBackupFileSystem();
+    reapExited(
+        fs,
+        filesDir.getCanonicalFile(),
+        BoundedGuestSessions::sessionEmpty,
+        BoundedGuestSessions::leaderExited,
+        () ->
+            new String(
+                fs.small(new File("/proc/sys/kernel/random/boot_id"), 64),
+                StandardCharsets.US_ASCII),
+        BoundedGuestSessions::appUidQuiescent);
   }
 
   static void reapExited(BackupFileSystem fs, File filesDir) throws IOException {
@@ -359,11 +398,22 @@ public final class BoundedGuestSessions {
       SessionProbe leader,
       BoundedGuestBootRecovery.BootSource boots)
       throws IOException {
+    reapExited(fs, filesDir, legacy, leader, boots, BoundedGuestBootRecovery.NEVER);
+  }
+
+  static void reapExited(
+      BackupFileSystem fs,
+      File filesDir,
+      SessionProbe legacy,
+      SessionProbe leader,
+      BoundedGuestBootRecovery.BootSource boots,
+      BoundedGuestBootRecovery.Quiescence quiet)
+      throws IOException {
     File files = filesDir.getCanonicalFile();
     BoundedGuestBootRecovery.BindingGuard guard = id -> requireNoBootRecoveryBinding(fs, files, id);
     java.util.ArrayList<String> blocked =
         new java.util.ArrayList<>(
-            BoundedGuestBootRecovery.recoverPreserved(fs, files, boots, guard));
+            BoundedGuestBootRecovery.recoverPreserved(fs, files, boots, guard, quiet));
     File home = fs.child(filesDir.getCanonicalFile(), HOME);
     if (fs.stat(home).type.equals("MISSING")) {
       for (String id : BoundedGuestBootRecovery.pending(fs, files))
@@ -417,7 +467,7 @@ public final class BoundedGuestSessions {
             // Only a legacy ordinary record may acquire a reboot checkpoint. A
             // current owner or bound trial keeps its original closure contract.
             if (active.containsKey(id)) throw new IOException("BOUNDED_GUEST_CURRENT_OWNER");
-            BoundedGuestBootRecovery.recover(fs, files, entry, id, boots, guard);
+            BoundedGuestBootRecovery.recover(fs, files, entry, id, boots, guard, quiet);
             continue;
           }
           String tree =
@@ -704,6 +754,127 @@ public final class BoundedGuestSessions {
       } catch (ErrnoException absent) {
         return absent.errno == OsConstants.ESRCH;
       }
+    }
+  }
+
+  /**
+   * True only when every live process of this app UID is one of the app's own zygote processes.
+   * Guest commands, proot/bxroot and all their descendants run under the same UID, so any surviving
+   * member of the recorded tree would show up here. Identity must not be spoofable by the guest: a
+   * matching argv[0] is not enough, so a process counts as ours only when it was forked from the
+   * same zygote as this app and still executes {@code app_process}. Zombies cannot fork and are
+   * ignored. Anything unreadable fails closed and keeps the reboot requirement.
+   */
+  static boolean appUidQuiescent() throws IOException {
+    long zygote = parentPid(new File("/proc/self"));
+    return appUidQuiescent(
+        new File("/proc"),
+        android.os.Process.myUid(),
+        zygote,
+        BoundedGuestSessions::ownerUid,
+        BoundedGuestSessions::executable);
+  }
+
+  interface OwnerProbe {
+    /** Process UID, or {@link #GONE} when the process vanished while being scanned. */
+    int uid(File entry) throws IOException;
+  }
+
+  interface ExecutableProbe {
+    /** Absolute executable path, or null when it cannot be read. */
+    String path(File entry) throws IOException;
+  }
+
+  static final int GONE = -1;
+
+  static boolean appUidQuiescent(
+      File proc, int uid, long zygote, OwnerProbe owner, ExecutableProbe executable)
+      throws IOException {
+    File[] entries = proc.listFiles();
+    if (entries == null) throw new IOException("BOUNDED_GUEST_PROC_UNREADABLE");
+    for (File entry : entries) {
+      if (!entry.getName().matches("[1-9][0-9]*")) continue;
+      int ownerUid = owner.uid(entry);
+      if (ownerUid == GONE || ownerUid != uid) continue;
+      String stat;
+      try {
+        stat = Compat.readAll(new File(entry, "stat"));
+      } catch (IOException vanished) {
+        if (!entry.exists()) continue;
+        throw vanished;
+      }
+      int close = stat.lastIndexOf(')');
+      if (close < 0 || close + 2 >= stat.length())
+        throw new IOException("BOUNDED_GUEST_PROC_STAT_INVALID");
+      char state = stat.charAt(close + 2);
+      if (state == 'Z' || state == 'X') continue;
+      if (parent(stat) != zygote) return false;
+      if (!appProcess(executable.path(entry))) return false;
+    }
+    return true;
+  }
+
+  /** Both conditions are properties the guest cannot acquire by naming its process. */
+  private static boolean appProcess(String path) {
+    if (path == null || path.isEmpty()) return false;
+    return path.substring(path.lastIndexOf('/') + 1).startsWith("app_process");
+  }
+
+  private static long parentPid(File entry) throws IOException {
+    String stat;
+    try {
+      stat = Compat.readAll(new File(entry, "stat"));
+    } catch (IOException unreadable) {
+      throw new IOException("BOUNDED_GUEST_SELF_STAT_UNREADABLE", unreadable);
+    }
+    int close = stat.lastIndexOf(')');
+    if (close < 0 || close + 2 >= stat.length())
+      throw new IOException("BOUNDED_GUEST_PROC_STAT_INVALID");
+    return parent(stat);
+  }
+
+  private static long parent(String stat) throws IOException {
+    int close = stat.lastIndexOf(')');
+    if (close < 0 || close + 2 >= stat.length())
+      throw new IOException("BOUNDED_GUEST_PROC_STAT_INVALID");
+    try {
+      String[] fields = stat.substring(close + 2).trim().split("\\s+");
+      if (fields.length < 2) throw new NumberFormatException();
+      return Long.parseLong(fields[1]);
+    } catch (RuntimeException invalid) {
+      throw new IOException("BOUNDED_GUEST_PROC_STAT_INVALID", invalid);
+    }
+  }
+
+  private static int ownerUid(File entry) throws IOException {
+    try {
+      return Os.stat(entry.getAbsolutePath()).st_uid;
+    } catch (ErrnoException error) {
+      if (error.errno == OsConstants.ENOENT || error.errno == OsConstants.ESRCH) return GONE;
+      throw new IOException("BOUNDED_GUEST_OWNER_UNREADABLE", error);
+    }
+  }
+
+  private static String executable(File entry) {
+    try {
+      return Os.readlink(new File(entry, "exe").getAbsolutePath());
+    } catch (ErrnoException unavailable) {
+      return null;
+    }
+  }
+
+  private static String processName(File entry) {
+    try (java.io.InputStream in = new java.io.FileInputStream(new File(entry, "cmdline"))) {
+      byte[] buffer = new byte[256];
+      int length = 0;
+      for (int read;
+          length < buffer.length && (read = in.read(buffer, length, buffer.length - length)) > 0; )
+        length += read;
+      int end = 0;
+      while (end < length && buffer[end] != 0) end++;
+      return new String(buffer, 0, end, StandardCharsets.UTF_8);
+    } catch (IOException unavailable) {
+      return null;
     }
   }
 

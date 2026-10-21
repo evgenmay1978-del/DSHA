@@ -128,6 +128,11 @@ public class DshaApp extends Application
     ShizukuShell.init(this);
     com.deepseekharness.app.ui.ThemeController.apply(this);
     com.deepseekharness.app.core.RuntimeTasks.initialize(this);
+    // #28：被划掉、强行停止、覆盖安装或重启后正常启动，不再要求手动“恢复中断维护”。
+    String settled =
+        com.deepseekharness.app.runtime.BoundedGuestSessions.settleAfterRestart(getFilesDir());
+    if (settled != null)
+      com.deepseekharness.app.core.DiagnosticLog.record(this, "BOUNDED_GUEST_SETTLE", settled);
     final android.content.Context runtimeApp = getApplicationContext();
     runtimeHostPorts.install(
         new com.deepseekharness.app.runtime.RuntimeHostPorts.Provider() {

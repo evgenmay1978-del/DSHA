@@ -13,6 +13,8 @@ final class BoundedGuestBootRecovery {
   private static final String UUID = com.deepseekharness.app.util.Ids.UUID_PATTERN;
   private static final String CHECKPOINT = "DSHA_BOOT_BOUNDARY_CHECKPOINT_V1";
   private static final String CLOSED = "DSHA_BOOT_BOUNDARY_CLOSED_V1";
+  // Same-boot closure: no process of this app UID survived, so the recorded tree cannot exist.
+  private static final String QUIESCENT = "DSHA_UID_QUIESCENT_CLOSED_V1";
   private static final int LIMIT = 8192;
   private static final List<String> MEMBERS = List.of("identity", "intent", "protocol");
 
@@ -26,6 +28,18 @@ final class BoundedGuestBootRecovery {
   interface BindingGuard {
     void requireUnbound(String id) throws IOException;
   }
+
+  /**
+   * Same-boot alternative to a real reboot (#28). Every guest process runs under this app UID, so
+   * when the only processes of the UID left are the app's own zygote processes, the recorded tree
+   * is gone. Android force-stop kills the whole process group, which is the usual way a record is
+   * left without its exit receipt. Anything unreadable or alive keeps the reboot requirement.
+   */
+  interface Quiescence {
+    boolean confirmed() throws IOException;
+  }
+
+  static final Quiescence NEVER = () -> false;
 
   private record Checkpoint(String id, String boot, String digest, byte[] snapshot) {}
 
@@ -69,6 +83,12 @@ final class BoundedGuestBootRecovery {
   /** Only invoked by the existing explicit maintenance reap fence, never by inventory/startup. */
   static List<String> recoverPreserved(
       BackupFileSystem fs, File files, BootSource boots, BindingGuard guard) throws IOException {
+    return recoverPreserved(fs, files, boots, guard, NEVER);
+  }
+
+  static List<String> recoverPreserved(
+      BackupFileSystem fs, File files, BootSource boots, BindingGuard guard, Quiescence quiet)
+      throws IOException {
     cancelled();
     List<String> blocked = new ArrayList<>();
     for (String id : ids(fs, files)) {
@@ -79,7 +99,7 @@ final class BoundedGuestBootRecovery {
         if (fs.stat(fs.child(journal, "original")).type.equals("MISSING")) continue;
         if (!fs.stat(active(fs, files, id)).type.equals("MISSING"))
           throw new IOException("BOUNDED_GUEST_BOOT_LOCATION_CONFLICT");
-        finish(fs, files, journal, checkpoint(fs, journal, id), boots, guard);
+        finish(fs, files, journal, checkpoint(fs, journal, id), boots, guard, quiet);
       } catch (InterruptedIOException cancelled) {
         throw cancelled;
       } catch (IOException failure) {
@@ -91,6 +111,18 @@ final class BoundedGuestBootRecovery {
 
   static void recover(
       BackupFileSystem fs, File files, File entry, String id, BootSource boots, BindingGuard guard)
+      throws IOException {
+    recover(fs, files, entry, id, boots, guard, NEVER);
+  }
+
+  static void recover(
+      BackupFileSystem fs,
+      File files,
+      File entry,
+      String id,
+      BootSource boots,
+      BindingGuard guard,
+      Quiescence quiet)
       throws IOException {
     cancelled();
     if (!id.matches(UUID) || !entry.equals(active(fs, files, id)))
@@ -124,23 +156,27 @@ final class BoundedGuestBootRecovery {
         throw new IOException("BOUNDED_GUEST_BOOT_RECORD_CHANGED");
       publish(fs, journal, "checkpoint", value);
       sync(fs, files, journal);
-      throw new IOException("BOUNDED_GUEST_REAL_REBOOT_REQUIRED:" + id);
+      // Falls through: the same-boot check below still demands a reboot or UID quiescence.
     }
     Checkpoint checkpoint = checkpoint(fs, journal, id);
     if (!Arrays.equals(snapshot, checkpoint.snapshot))
       throw new IOException("BOUNDED_GUEST_BOOT_ORIGINAL_CHANGED");
     sync(fs, files, journal);
-    if (checkpoint.boot.equals(currentBoot))
+    boolean sameBoot = checkpoint.boot.equals(currentBoot);
+    if (sameBoot && !quiescent(quiet))
       throw new IOException("BOUNDED_GUEST_REAL_REBOOT_REQUIRED:" + id);
     // Checkpoint and its parents must be durable before removing the active pathname.
     guard.requireUnbound(id);
     if (!currentBoot.equals(boot(boots)) || !Arrays.equals(snapshot, capture(fs, entry, id)))
       throw new IOException("BOUNDED_GUEST_BOOT_RECORD_CHANGED");
+    // Re-prove quiescence immediately before the active pathname moves.
+    if (sameBoot && !quiescent(quiet))
+      throw new IOException("BOUNDED_GUEST_REAL_REBOOT_REQUIRED:" + id);
     cancelled();
     fs.move(entry, fs.child(journal, "original"));
     fs.syncDirectory(entry.getParentFile());
     sync(fs, files, journal);
-    finish(fs, files, journal, checkpoint, boots, guard);
+    finish(fs, files, journal, checkpoint, boots, guard, quiet);
   }
 
   private static void finish(
@@ -149,7 +185,8 @@ final class BoundedGuestBootRecovery {
       File journal,
       Checkpoint checkpoint,
       BootSource boots,
-      BindingGuard guard)
+      BindingGuard guard,
+      Quiescence quiet)
       throws IOException {
     cancelled();
     if (!fs.stat(active(fs, files, checkpoint.id)).type.equals("MISSING")
@@ -163,7 +200,8 @@ final class BoundedGuestBootRecovery {
     }
     guard.requireUnbound(checkpoint.id);
     String currentBoot = boot(boots);
-    if (checkpoint.boot.equals(currentBoot))
+    boolean sameBoot = checkpoint.boot.equals(currentBoot);
+    if (sameBoot && !quiescent(quiet))
       throw new IOException("BOUNDED_GUEST_REAL_REBOOT_REQUIRED:" + checkpoint.id);
     if (!currentBoot.equals(boot(boots))) throw new IOException("BOUNDED_GUEST_BOOT_ID_CHANGED");
     publish(
@@ -171,7 +209,7 @@ final class BoundedGuestBootRecovery {
         journal,
         "closed",
         ascii(
-            CLOSED
+            (sameBoot ? QUIESCENT : CLOSED)
                 + "\n"
                 + checkpoint.id
                 + "\n"
@@ -187,12 +225,13 @@ final class BoundedGuestBootRecovery {
   private static void validateClosed(BackupFileSystem fs, File journal, Checkpoint checkpoint)
       throws IOException {
     String[] fields = text(fs, fs.child(journal, "closed")).split("\n", -1);
+    boolean quiescent = fields.length == 6 && fields[0].equals(QUIESCENT);
     if (fields.length != 6
-        || !fields[0].equals(CLOSED)
+        || !(fields[0].equals(CLOSED) || quiescent)
         || !fields[1].equals(checkpoint.id)
         || !fields[2].equals(checkpoint.boot)
         || !fields[3].matches(UUID)
-        || fields[2].equals(fields[3])
+        || quiescent != fields[2].equals(fields[3])
         || !fields[4].equals(checkpoint.digest)
         || !fields[5].isEmpty()) throw new IOException("BOUNDED_GUEST_BOOT_PROOF_INVALID");
   }
@@ -244,6 +283,20 @@ final class BoundedGuestBootRecovery {
         out.writeInt(value.length);
         out.write(value);
       }
+      // The optional owner marker is part of the canonical snapshot: a marker added or changed
+      // after the checkpoint must fail the comparison instead of being silently accepted.
+      if (names.contains("retain")) {
+        File file = fs.child(entry, "retain");
+        BackupFileSystem.Node node = fs.stat(file);
+        byte[] value = fs.small(file, 64);
+        if (!node.same(fs.stat(file))) throw new IOException("BOUNDED_GUEST_BOOT_RECORD_CHANGED");
+        if (!Arrays.equals(value, ascii("RECORDED_OWNER\n")))
+          throw new IOException("BOUNDED_GUEST_BOOT_RECORD_INVALID");
+        out.writeUTF("retain");
+        identity(out, node, true);
+        out.writeInt(value.length);
+        out.write(value);
+      }
     }
     String birth = new String(values.get("identity"), StandardCharsets.US_ASCII);
     String[] lines = birth.split("\n", -1);
@@ -254,9 +307,6 @@ final class BoundedGuestBootRecovery {
         || !Arrays.equals(values.get("intent"), ascii(id + "\n"))
         || !Arrays.equals(values.get("protocol"), ascii("DSHA_OWNED_TREE_V2\n")))
       throw new IOException("BOUNDED_GUEST_BOOT_RECORD_INVALID");
-    if (names.contains("retain")
-        && !Arrays.equals(fs.small(fs.child(entry, "retain"), 64), ascii("RECORDED_OWNER\n")))
-      throw new IOException("BOUNDED_GUEST_BOOT_RECORD_INVALID");
     try {
       String[] fields = lines[1].split(" ");
       if (Integer.parseInt(fields[0]) < 2
@@ -265,8 +315,7 @@ final class BoundedGuestBootRecovery {
     } catch (NumberFormatException invalid) {
       throw new IOException("BOUNDED_GUEST_BOOT_RECORD_INVALID", invalid);
     }
-    if (!directory.same(fs.stat(entry))
-        || !new HashSet<>(fs.list(entry)).equals(new HashSet<>(MEMBERS)))
+    if (!directory.same(fs.stat(entry)) || !new HashSet<>(fs.list(entry)).equals(names))
       throw new IOException("BOUNDED_GUEST_BOOT_RECORD_CHANGED");
     return bytes.toByteArray();
   }
@@ -361,9 +410,14 @@ final class BoundedGuestBootRecovery {
     String value = new String(bytes, StandardCharsets.US_ASCII);
     if (!Arrays.equals(bytes, ascii(value)))
       throw new IOException("BOUNDED_GUEST_BOOT_TEMP_INVALID");
-    String header = (name.startsWith("checkpoint.") ? CHECKPOINT : CLOSED) + "\n" + id + "\n";
-    if (header.startsWith(value)) return;
-    if (!value.startsWith(header)) throw new IOException("BOUNDED_GUEST_BOOT_TEMP_INVALID");
+    String header = null;
+    for (String kind :
+        name.startsWith("checkpoint.") ? List.of(CHECKPOINT) : List.of(CLOSED, QUIESCENT)) {
+      String candidate = kind + "\n" + id + "\n";
+      if (candidate.startsWith(value)) return;
+      if (value.startsWith(candidate)) header = candidate;
+    }
+    if (header == null) throw new IOException("BOUNDED_GUEST_BOOT_TEMP_INVALID");
     String[] fields = value.substring(header.length()).split("\n", -1);
     int count = 3;
     if (fields.length > count + 1 || fields.length == count + 1 && !fields[count].isEmpty())
@@ -398,6 +452,19 @@ final class BoundedGuestBootRecovery {
       } catch (IllegalArgumentException invalid) {
         throw new IOException("BOUNDED_GUEST_BOOT_TEMP_INVALID", invalid);
       }
+    }
+  }
+
+  /** Unreadable or failing evidence never proves quiescence; cancellation still propagates. */
+  private static boolean quiescent(Quiescence quiet) throws IOException {
+    cancelled();
+    if (quiet == null) return false;
+    try {
+      return quiet.confirmed();
+    } catch (InterruptedIOException cancelled) {
+      throw cancelled;
+    } catch (IOException | RuntimeException unproven) {
+      return false;
     }
   }
 
