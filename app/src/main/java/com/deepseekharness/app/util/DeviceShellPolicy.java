@@ -138,7 +138,7 @@ public final class DeviceShellPolicy {
       if (part.isEmpty())
         return deny(com.deepseekharness.app.util.UiText.text("Пустая часть конвейера"));
       Plan inner = inspect(part);
-      if (!inner.ok() || inner.kind != Kind.READ)
+      if (!inner.allowed() || inner.kind != Kind.READ)
         return deny(
             com.deepseekharness.app.util.UiText.format(
                 "В конвейере допустимы только read-only команды: %s", part));
