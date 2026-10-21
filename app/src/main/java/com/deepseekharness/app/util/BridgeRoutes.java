@@ -30,6 +30,7 @@ public final class BridgeRoutes {
     VIBRATE(false),
     ASK(false),
     VERSION(false),
+    RESTART(false),
     HELP(false),
     PLUGINS(false),
     OVERLAY(false),
@@ -80,6 +81,7 @@ public final class BridgeRoutes {
     add(routes, "/app/vibrate", Route.VIBRATE);
     add(routes, "/app/ask", Route.ASK);
     add(routes, "/app/version", Route.VERSION);
+    add(routes, "/app/restart", Route.RESTART);
     add(routes, "/app/help", Route.HELP);
     add(routes, "/app/plugins", Route.PLUGINS);
     add(routes, "/app/overlay", Route.OVERLAY);

@@ -220,6 +220,7 @@ public final class HttpShellService {
     routes.put(BridgeRoutes.Route.VIBRATE, (s, r) -> s.appVibrate(r.path));
     routes.put(BridgeRoutes.Route.ASK, (s, r) -> s.appAsk(r.path));
     routes.put(BridgeRoutes.Route.VERSION, (s, r) -> s.appVersion());
+    routes.put(BridgeRoutes.Route.RESTART, (s, r) -> s.appRestart(r.path));
     routes.put(BridgeRoutes.Route.HELP, (s, r) -> s.appHelp());
     routes.put(BridgeRoutes.Route.PLUGINS, (s, r) -> s.appPlugins(r.path));
     routes.put(BridgeRoutes.Route.OVERLAY, (s, r) -> s.appOverlay(r.path));
@@ -1619,6 +1620,61 @@ public final class HttpShellService {
    * <p>没有这个端点时，插件只能靠「试着调一下看会不会 404」来猜 App 的能力，
    * 而 dsh 与 DSHA 是各自升级的 —— 用户完全可能拿新插件配旧 App。
    */
+  /** 正在进行的重启：第二次调用直接拒绝，避免自激循环（EADDRINUSE 抖动）。 */
+  private static final java.util.concurrent.atomic.AtomicBoolean RESTARTING =
+      new java.util.concurrent.atomic.AtomicBoolean();
+
+  /**
+   * {@code /app/restart?target=engine|app}: аккуратный перезапуск без ручных действий.
+   *
+   * <p>Никогда не запускается во время обслуживания: незавершённый журнал + рестарт — это ровно
+   * тот сценарий, который раньше превращался в «среда не поднимается».
+   */
+  private String appRestart(String q) {
+    String target = getParam(q, "target", "engine").trim().toLowerCase(java.util.Locale.ROOT);
+    if (!target.equals("engine") && !target.equals("app"))
+      return "[ERR] RESTART_TARGET_UNKNOWN: target=engine|app";
+    boolean busy;
+    try {
+      busy = com.deepseekharness.app.backup.HostMaintenancePending.blocked(ctx.getFilesDir());
+    } catch (java.io.IOException unreadable) {
+      busy = true;
+    }
+    if (busy)
+      return "[ERR] RESTART_BLOCKED: незавершённое обслуживание, сначала завершите восстановление";
+    if (!RESTARTING.compareAndSet(false, true)) return "[ERR] RESTART_IN_PROGRESS";
+    String job = java.util.UUID.randomUUID().toString();
+    Thread worker =
+        new Thread(
+            () -> {
+              boolean engine = !target.equals("app");
+              try {
+                if (!engine) {
+                  Thread.sleep(1500L);
+                  android.os.Process.killProcess(android.os.Process.myPid());
+                  return;
+                }
+                com.deepseekharness.app.core.HarnessController controller =
+                    com.deepseekharness.app.core.HarnessController.get(ctx);
+                if (controller == null) return;
+                controller.stopWeb();
+                Thread.sleep(2000L);
+                controller.startWeb(status -> {});
+              } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+              } catch (RuntimeException failed) {
+                // 重启失败不抛出: состояние остаётся в维护-записи, вызывающий проверяет /app/version.
+              } finally {
+                if (engine) RESTARTING.set(false);
+              }
+            },
+            "dsha-bridge-restart");
+    worker.setDaemon(true);
+    worker.start();
+    return com.deepseekharness.app.util.UiText.format(
+        "202 {"ok":true,"job_id":"%s","target":"%s"}", job, target);
+  }
+
   private String appVersion() {
     return com.deepseekharness.app.util.UiText.format(
         "BRIDGE_PROTOCOL=%s\nBRIDGE_AUTH=header-x-token\nAPP_VERSION=%s\nAPP_CODE=%s\nHINT=端点清单见 /app/help；判版本请用 >= 而不是 ==\n",
