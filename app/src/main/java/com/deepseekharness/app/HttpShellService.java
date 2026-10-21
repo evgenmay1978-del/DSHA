@@ -1691,15 +1691,12 @@ public final class HttpShellService {
       busy = true;
     }
     if (busy) return "[ERR] RELOAD_BLOCKED: незавершённое обслуживание";
-    java.io.File rootfs =
-        com.deepseekharness.app.util.GuestPaths.rootfs(ctx.getFilesDir());
-    java.io.File patch =
-        new java.io.File(rootfs, "root/.dsh/profiles/web/cordis.patch.yml");
+    java.io.File rootfs = com.deepseekharness.app.util.GuestPaths.rootfs(ctx.getFilesDir());
+    java.io.File patch = new java.io.File(rootfs, "root/.dsh/profiles/web/cordis.patch.yml");
     if (!patch.isFile()) return "[ERR] RELOAD_NO_PROFILE: cordis.patch.yml не найден";
     try {
       byte[] body = java.nio.file.Files.readAllBytes(patch.toPath());
-      String marker =
-          "# dsha reload-request " + java.time.Instant.now() + System.lineSeparator();
+      String marker = "# dsha reload-request " + java.time.Instant.now() + System.lineSeparator();
       byte[] tail = marker.getBytes(java.nio.charset.StandardCharsets.UTF_8);
       java.io.File temporary =
           new java.io.File(patch.getParentFile(), "cordis.patch.yml.dsha-" + System.nanoTime());
@@ -1713,7 +1710,7 @@ public final class HttpShellService {
         temporary.delete();
         return "[ERR] RELOAD_WRITE_FAILED";
       }
-      return "202 {"ok":true,"reload":"requested"}";
+      return "202 {\"ok\":true,\"reload\":\"requested\"}";
     } catch (java.io.IOException failed) {
       return "[ERR] RELOAD_WRITE_FAILED: " + failed.getClass().getSimpleName();
     }
