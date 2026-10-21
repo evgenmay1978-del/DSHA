@@ -138,13 +138,39 @@ public final class BoundedGuestSessions {
    * Startup tolerance: an interrupted guest journal whose record can no longer be validated (for
    * example a retained member written after the checkpoint) keeps every file on disk but never
    * blocks the environment. Explicit recovery keeps the strict barrier.
+   *
+   * <p>Returns the user-visible explanation when a guest record stays retained. A bounded guest is
+   * the only maintenance gate without a legacy transaction, so a caller that reports "nothing to
+   * recover" while this record keeps the gate blocked contradicts the screen it is shown on.
    */
-  public static void reapExitedTolerant(File filesDir) throws IOException {
+  public static String reapExitedTolerant(File filesDir) throws IOException {
+    BackupFileSystem fs = new AndroidBackupFileSystem();
+    return reapExitedTolerant(
+        fs,
+        filesDir.getCanonicalFile(),
+        BoundedGuestSessions::sessionEmpty,
+        BoundedGuestSessions::leaderExited,
+        () ->
+            new String(
+                fs.small(new File("/proc/sys/kernel/random/boot_id"), 64),
+                StandardCharsets.US_ASCII));
+  }
+
+  static String reapExitedTolerant(
+      BackupFileSystem fs,
+      File filesDir,
+      SessionProbe legacy,
+      SessionProbe leader,
+      BoundedGuestBootRecovery.BootSource boots)
+      throws IOException {
     try {
-      reapExited(filesDir);
+      reapExited(fs, filesDir, legacy, leader, boots);
+      return null;
     } catch (IOException unconfirmed) {
-      if (!String.valueOf(unconfirmed.getMessage()).startsWith("BOUNDED_GUEST_RECORDS_RETAINED"))
-        throw unconfirmed;
+      String detail = String.valueOf(unconfirmed.getMessage());
+      if (!detail.startsWith("BOUNDED_GUEST_RECORDS_RETAINED")) throw unconfirmed;
+      int explanation = detail.indexOf('\n');
+      return explanation < 0 ? detail : detail.substring(explanation + 1).trim();
     }
   }
 
@@ -436,7 +462,7 @@ public final class BoundedGuestSessions {
               detail,
               com.deepseekharness.app.util.UiText.choose(
                   "退出回执因中断缺失，需重启手机，再点“恢复中断维护”；原记录和个人文件保留。",
-                  "Restart the phone, then recover maintenance. Originals and files are kept."));
+                  "Restart the phone, then tap Recover interrupted maintenance again. Original records and personal files are retained and the current environment is not overwritten."));
     if (blocked.stream().anyMatch(value -> value.contains("BOUNDED_GUEST_BOOT_ID_")))
       detail =
           String.join(
@@ -445,6 +471,14 @@ public final class BoundedGuestSessions {
               com.deepseekharness.app.util.UiText.choose(
                   "无法读取或核验本机启动标识，无法确认重启边界；原记录和个人文件保留。",
                   "Cannot verify this boot. Original records and personal files are kept."));
+    if (!detail.contains("\n"))
+      detail =
+          String.join(
+              "\n",
+              detail,
+              com.deepseekharness.app.util.UiText.choose(
+                  "受限会话尚未确认退出；请结束正在运行的任务后重试。原记录和个人文件保留。",
+                  "The bounded session is not confirmed exited. Stop running tasks and retry; records and personal files are retained."));
     return new IOException(detail);
   }
 
