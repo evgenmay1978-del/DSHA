@@ -131,7 +131,8 @@ public final class DeviceShellPolicy {
     }
     if (quote != 0) return deny(com.deepseekharness.app.util.UiText.text("Незакрытая кавычка"));
     segments.add(current.toString());
-    if (segments.size() < 2 || segments.size() > 8)
+    if (segments.size() < 2) return null;
+    if (segments.size() > 8)
       return deny(com.deepseekharness.app.util.UiText.text("Слишком много частей в конвейере"));
     for (String segment : segments) {
       String part = segment.trim();
