@@ -1685,7 +1685,14 @@ public final class HttpShellService {
     java.io.File patch = new java.io.File(rootfs, "root/.dsh/profiles/web/cordis.patch.yml");
     if (!patch.isFile()) return "[ERR] RELOAD_NO_PROFILE: cordis.patch.yml не найден";
     try {
-      byte[] body = java.nio.file.Files.readAllBytes(patch.toPath());
+      byte[] body;
+      try (java.io.FileInputStream in = new java.io.FileInputStream(patch)) {
+        java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+        byte[] chunk = new byte[8192];
+        int read;
+        while ((read = in.read(chunk)) > 0) buffer.write(chunk, 0, read);
+        body = buffer.toByteArray();
+      }
       String marker = "# dsha reload-request " + java.time.Instant.now() + System.lineSeparator();
       byte[] tail = marker.getBytes(java.nio.charset.StandardCharsets.UTF_8);
       java.io.File temporary =
